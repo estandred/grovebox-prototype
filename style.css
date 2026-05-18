@@ -1,0 +1,1040 @@
+:root {
+  --bg: #0e0e10;
+  --panel: #16161a;
+  --panel-2: #1c1c22;
+  --panel-3: #22222a;
+  --line: #2a2a33;
+  --ink: #e8e8ea;
+  --ink-dim: #8a8a93;
+  --ink-mute: #5a5a63;
+  --accent: #ffd166;
+  --accent-2: #ef476f;
+  --ok: #8ce99a;
+  --warn: #ffa94d;
+  --row-drums: #ef476f;
+  --row-hook: #ffd166;
+  --row-bass: #06d6a0;
+  --row-chords: #4cc9f0;
+  --row-vocals: #c77dff;
+  --row-efx: #ff8c42;
+  --radius: 10px;
+  --pad-radius: 12px;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  height: 100%;
+  overflow: hidden;
+}
+body {
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: 0.01em;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+
+#app { height: 100vh; display: flex; flex-direction: column; }
+
+/* ───────── Home: song tiles ───────── */
+.home {
+  padding: 28px 36px 80px;
+  overflow-y: auto;
+  flex: 1;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+.home-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+.brand {
+  font-size: 13px;
+  color: var(--ink-dim);
+  letter-spacing: 0.18em;
+  text-transform: lowercase;
+}
+.brand span { color: var(--ink); }
+.home-title { font-size: 28px; margin: 0 0 22px; font-weight: 500; }
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 16px;
+}
+.tile {
+  aspect-ratio: 1 / 1;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.15s, transform 0.08s, background 0.15s;
+}
+.tile:hover { border-color: var(--ink-mute); background: var(--panel-2); }
+.tile:active { transform: scale(0.98); }
+.tile-name { font-size: 15px; color: var(--ink); word-break: break-word; }
+.tile-meta { font-size: 11px; color: var(--ink-dim); }
+.tile-row-strip {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  display: flex;
+}
+.tile-row-strip span { flex: 1; opacity: 0.5; }
+
+.tile.new {
+  background: transparent;
+  border: 1px dashed var(--line);
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-dim);
+}
+.tile.new:hover { color: var(--ink); border-color: var(--ink-mute); }
+.tile.new .plus { font-size: 32px; line-height: 1; margin-bottom: 6px; }
+.tile.new .lbl { font-size: 12px; letter-spacing: 0.08em; text-transform: lowercase; }
+
+.tile-actions {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.tile:hover .tile-actions { opacity: 1; }
+.tile-actions button {
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 7px;
+  font-size: 10px;
+  color: var(--ink-dim);
+}
+.tile-actions button:hover { color: var(--ink); }
+
+.empty-state {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 40px;
+  text-align: center;
+  color: var(--ink-dim);
+  grid-column: 1 / -1;
+}
+.empty-state strong { display: block; color: var(--ink); font-weight: 500; margin-bottom: 6px; font-size: 16px; }
+
+/* ───────── Editor: tablet-landscape ───────── */
+.editor {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+}
+
+.editor-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.head-left, .head-right { display: flex; align-items: center; gap: 10px; }
+.head-right { justify-content: flex-end; }
+
+.back-link {
+  color: var(--ink-dim);
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+.back-link:hover { color: var(--ink); background: var(--panel-2); }
+
+.editor-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.editor-title input {
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: center;
+  outline: none;
+  padding: 4px 8px;
+  border-bottom: 1px dashed transparent;
+  min-width: 160px;
+}
+.editor-title input:hover, .editor-title input:focus { border-bottom-color: var(--ink-mute); }
+
+.group {
+  display: inline-flex;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.group button {
+  background: transparent;
+  border: none;
+  padding: 7px 12px;
+  color: var(--ink-dim);
+  font-size: 12px;
+  border-right: 1px solid var(--line);
+}
+.group button:last-child { border-right: none; }
+.group button.active { background: var(--panel-3); color: var(--ink); }
+.group button:hover { color: var(--ink); }
+.group .label {
+  padding: 7px 10px;
+  color: var(--ink-mute);
+  font-size: 11px;
+  border-right: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+}
+
+.btn {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 12px;
+  color: var(--ink);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.btn:hover { border-color: var(--ink-mute); }
+.btn.primary { background: var(--accent); color: #0e0e10; border-color: var(--accent); font-weight: 500; }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.danger { color: var(--accent-2); }
+.btn.ghost { background: transparent; }
+
+.bpm {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.bpm .label {
+  padding: 7px 10px;
+  color: var(--ink-mute);
+  font-size: 11px;
+  border-right: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  letter-spacing: 0.05em;
+}
+.bpm button {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--line);
+  padding: 0 11px;
+  color: var(--ink-dim);
+  font-size: 14px;
+  line-height: 1;
+  min-width: 30px;
+}
+.bpm button:last-child { border-right: none; }
+.bpm button:hover { color: var(--ink); background: var(--panel-3); }
+.bpm button:active { background: var(--panel); }
+.bpm input {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--line);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  width: 52px;
+  text-align: center;
+  outline: none;
+  padding: 6px 4px;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+}
+.bpm input::-webkit-outer-spin-button,
+.bpm input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.bpm .tap {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: lowercase;
+  padding: 0 12px;
+}
+.bpm .tap.flash { color: var(--accent); }
+
+/* Read-only BPM display (performance mode) */
+.bpm.bpm-readonly .bpm-static {
+  padding: 6px 14px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* Mode badge near the back link */
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink-dim);
+}
+.mode-badge.edit {
+  color: #0e0e10;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.mode-badge.performance { color: var(--ok); }
+
+/* Performance mode: song title is non-editable text */
+.editor-title .title-static {
+  padding: 4px 8px;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+/* ───── Editor body: 3-column layout (areas | deck | areas) ───── */
+.editor-body {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+  min-height: 0;
+}
+.side-stack {
+  display: grid;
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+}
+
+.area {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--row-color, var(--ink-mute));
+  border-radius: var(--radius);
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.area-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+.area-name {
+  font-size: 12px;
+  text-transform: lowercase;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+}
+.area-tabs {
+  display: flex;
+  gap: 4px;
+}
+.area-tab {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in oklab, var(--row-color) 35%, var(--line));
+  border-radius: 4px;
+  color: #f0f0f3;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.area-tab:hover {
+  background: color-mix(in oklab, var(--row-color) 20%, rgba(255,255,255,0.1));
+  color: #fff;
+}
+.area-tab.active {
+  background: var(--row-color);
+  color: #0e0e10;
+  border-color: var(--row-color);
+  box-shadow: 0 0 0 1px var(--row-color),
+              0 0 8px color-mix(in oklab, var(--row-color) 50%, transparent);
+}
+/* ───── Per-track effects panel ───── */
+/* Knob grid: 6 columns × 2 rows. Holds up to 12 effects (vocals = 11 with
+   robot, others = 10 — leaves 1–2 empty cells at the end). Even spread
+   across the rectangle, no scrolling. */
+.area-effects {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: 1fr 1fr;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  padding: 2px;
+  place-items: center;
+}
+.knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.knob-dial {
+  width: clamp(34px, 60%, 56px);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%,
+    color-mix(in oklab, var(--row-color) 40%, var(--panel-2)) 0%,
+    var(--panel-2) 70%);
+  border: 1px solid color-mix(in oklab, var(--row-color) 50%, var(--line));
+  position: relative;
+  cursor: ns-resize;
+  touch-action: none;
+  box-shadow: inset 0 -2px 4px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  flex-shrink: 0;
+}
+.knob-dial.dragging {
+  box-shadow: inset 0 -2px 4px rgba(0,0,0,0.4),
+              0 0 0 2px color-mix(in oklab, var(--row-color) 55%, transparent);
+}
+/* Indicator: vertical 2px bar whose bottom sits at the dial's center. Rotates
+   around its own bottom point so the top swings −135° → +135° as the knob
+   moves 0 → 1. */
+.knob-indicator {
+  position: absolute;
+  top: 16%;            /* leaves 50% from bottom → bottom hits dial center */
+  left: 50%;
+  width: 2px;
+  height: 34%;
+  background: var(--row-color);
+  border-radius: 1px;
+  transform-origin: 50% 100%;
+  transform: translateX(-50%) rotate(-135deg);
+  box-shadow: 0 0 4px color-mix(in oklab, var(--row-color) 70%, transparent);
+}
+.knob-label {
+  font-size: 10px;
+  color: var(--ink);
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  text-align: center;
+}
+.knob-value { display: none; }
+
+/* ───── Per-effect parameter editor (zoom view) ───── */
+.area-head.effect-zoom-head { align-items: center; }
+.effect-back-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in oklab, var(--row-color) 35%, var(--line));
+  border-radius: 4px;
+  color: #f0f0f3;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.effect-back-btn:hover {
+  background: color-mix(in oklab, var(--row-color) 20%, rgba(255,255,255,0.1));
+  color: #fff;
+}
+
+.effect-params {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 6px 4px 4px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.effect-mainknob-preview {
+  display: flex;
+  justify-content: center;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+.effect-mainknob-preview .knob { width: auto; height: auto; }
+.effect-mainknob-preview .knob-dial { width: 44px; }
+
+/* The "current value" marker: shows where the main knob currently resolves
+   on this parameter's bar. Helps the user see why dragging the high handle
+   has no effect while the main knob is at 0 (the dot stays on top of low). */
+.param-current-dot {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid color-mix(in oklab, var(--row-color) 70%, var(--ink));
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 0 6px rgba(255,255,255,0.5);
+  z-index: 1;
+}
+.effect-params.empty {
+  color: var(--ink-mute);
+  font-size: 11px;
+  align-items: center;
+  justify-content: center;
+}
+
+.effect-param-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.param-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.param-label {
+  font-size: 11px;
+  color: var(--ink);
+  letter-spacing: 0.05em;
+  text-transform: lowercase;
+}
+.param-range {
+  font-size: 9px;
+  color: var(--ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+
+.param-bar-wrap {
+  display: grid;
+  grid-template-columns: 36px 1fr 36px;
+  align-items: center;
+  gap: 6px;
+}
+.param-endpoint-value {
+  font-size: 9px;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+.param-endpoint-value.low  { text-align: right; }
+.param-endpoint-value.high { text-align: left; }
+
+/* Horizontal track = parameter's full range. */
+.param-track {
+  position: relative;
+  height: 14px;
+  background: linear-gradient(90deg,
+    color-mix(in oklab, var(--row-color) 14%, var(--panel-2)) 0%,
+    color-mix(in oklab, var(--row-color) 36%, var(--panel-2)) 100%);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  touch-action: none;
+}
+
+/* Automation line: the segment from the low-handle to the high-handle. */
+.param-line {
+  position: absolute;
+  top: 50%;
+  height: 3px;
+  background: var(--row-color);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--row-color) 60%, transparent);
+  transform: translateY(-50%);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.param-handle {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 18px;
+  margin-left: -7px;
+  border-radius: 4px;
+  background: var(--ink);
+  border: 1px solid var(--row-color);
+  transform: translateY(-50%);
+  cursor: ew-resize;
+  touch-action: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  z-index: 2;
+}
+.param-handle:hover { background: var(--row-color); border-color: var(--ink); }
+.param-handle.dragging {
+  background: var(--row-color);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--row-color) 55%, transparent),
+              0 2px 6px rgba(0,0,0,0.5);
+}
+.param-handle.low::before,
+.param-handle.high::before {
+  content: "";
+  position: absolute;
+  inset: 4px 5px;
+  border-radius: 1px;
+  background: color-mix(in oklab, var(--row-color) 70%, var(--panel));
+}
+.param-handle.dragging::before { background: var(--ink); }
+
+/* Single-handle fader (intensity-style). The fill stretches from the left
+   edge of the bar up to the handle so the value is obvious at a glance. */
+.param-track.fader-track { cursor: ew-resize; }
+.param-fader-fill {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  right: 100%;
+  background: linear-gradient(90deg,
+    color-mix(in oklab, var(--row-color) 30%, transparent) 0%,
+    color-mix(in oklab, var(--row-color) 70%, transparent) 100%);
+  border-radius: 7px 0 0 7px;
+  pointer-events: none;
+}
+.param-handle.fader { width: 12px; height: 22px; margin-left: -6px; }
+
+/* Choice-type parameter rows render buttons instead of a slider bar. */
+.param-choices {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.param-choice-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in oklab, var(--row-color) 35%, var(--line));
+  border-radius: 4px;
+  color: #f0f0f3;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 5px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  min-width: 48px;
+}
+.param-choice-btn:hover {
+  background: color-mix(in oklab, var(--row-color) 20%, rgba(255,255,255,0.1));
+  color: #fff;
+}
+.param-choice-btn.active {
+  background: var(--row-color);
+  color: #0e0e10;
+  border-color: var(--row-color);
+  box-shadow: 0 0 0 1px var(--row-color),
+              0 0 6px color-mix(in oklab, var(--row-color) 45%, transparent);
+}
+.area-pads {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.pad {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--pad-radius);
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  transition: transform 0.06s, box-shadow 0.12s, border-color 0.12s, background 0.12s;
+  overflow: hidden;
+  min-height: 0;
+}
+.pad:hover { border-color: var(--ink-mute); }
+.pad.loaded {
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, var(--row-color) 26%, var(--panel-2)) 0%,
+      var(--panel-2) 100%);
+  border-color: color-mix(in oklab, var(--row-color) 45%, var(--line));
+}
+.pad.playing {
+  border-color: var(--row-color);
+  box-shadow:
+    0 0 0 2px color-mix(in oklab, var(--row-color) 55%, transparent),
+    0 6px 22px rgba(0,0,0,0.4);
+  transform: translateY(-1px);
+}
+.pad.dragover {
+  border-style: dashed;
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 12%, var(--panel-2));
+}
+.pad-name {
+  /* Initial font-size is just a seed; fitPadName() picks the largest size
+     (within [8px, 28px]) that fits the pad's content box, wrapping onto
+     2 or 3 lines as needed to show the full name. */
+  font-size: 16px;
+  color: var(--ink-dim);
+  max-width: 100%;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-align: center;
+  letter-spacing: 0;
+  font-weight: 500;
+  line-height: 1.1;
+}
+.pad.loaded .pad-name { color: var(--ink); }
+.pad.edit .pad-name { cursor: text; }
+.pad.edit .pad-name:hover { color: var(--accent); }
+.pad-placeholder { font-size: 10px; color: var(--ink-mute); letter-spacing: 0.04em; }
+.pad-clear {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 12px;
+  color: var(--ink-mute);
+  background: transparent;
+  border: none;
+  opacity: 0;
+  padding: 2px 4px;
+  transition: opacity 0.15s;
+}
+.pad:hover .pad-clear { opacity: 1; }
+.pad-clear:hover { color: var(--accent-2); }
+
+/* Edit-mode pad: three stacked toggles compacted to fit small pads */
+.pad.edit { padding-bottom: 52px; }
+.pad-edit-controls {
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  bottom: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 1;
+}
+.pad-mode-toggle,
+.pad-interact-toggle,
+.pad-retap-toggle {
+  display: flex;
+  width: 100%;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 8px;
+  height: 13px;
+  line-height: 1;
+}
+.pad-mode-toggle button,
+.pad-interact-toggle button,
+.pad-retap-toggle button {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 0 2px;
+  color: var(--ink-mute);
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  cursor: pointer;
+}
+.pad-mode-toggle button:hover,
+.pad-interact-toggle button:hover,
+.pad-retap-toggle button:hover { color: var(--ink); }
+.pad-mode-toggle button.active,
+.pad-interact-toggle button.active,
+.pad-retap-toggle button.active {
+  background: var(--row-color);
+  color: #0e0e10;
+}
+.pad-mode-toggle button.active:hover,
+.pad-interact-toggle button.active:hover,
+.pad-retap-toggle button.active:hover { color: #0e0e10; }
+
+/* Performance mode: small static badges (loop/shot, and "solo" if applicable) */
+.pad-indicators {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  display: inline-flex;
+  gap: 4px;
+  pointer-events: none;
+}
+.pad-mode-indicator {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+.pad-mode-indicator.loop { color: color-mix(in oklab, var(--row-color) 80%, white); }
+.pad-mode-indicator.shot { color: var(--warn); }
+.pad-mode-indicator.solo { color: var(--accent-2); }
+.pad-mode-indicator.restart { color: var(--accent); }
+
+/* ───── Center deck ───── */
+.deck {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  grid-template-rows: repeat(6, 1fr);
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+.deck-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  border-bottom: 1px solid var(--line);
+  min-height: 0;
+  overflow: hidden;
+}
+.deck-row:last-child { border-bottom: none; }
+.deck-label {
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: lowercase;
+  color: var(--ink-dim);
+  background: var(--panel-2);
+  border-right: 1px solid var(--line);
+  border-left: 3px solid var(--row-color, var(--ink-mute));
+}
+.deck-canvas-wrap {
+  position: relative;
+  overflow: hidden;
+  /* Faded row-color tint — matches the pad gradient (tinted at top, fading
+     out toward the bottom) so timelines feel visually consistent with the
+     pad areas. Applied in both view modes; freq view layers a stronger
+     version on top. */
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--row-color, var(--ink-mute)) 10%, transparent) 0%,
+    color-mix(in oklab, var(--row-color, var(--ink-mute)) 1%,  transparent) 100%);
+}
+/* Frequency view: slightly heavier tint (still faded) so the row is more
+   identifiable at a glance when the waveform isn't drawn in row color. */
+.editor.freq-view .deck-canvas-wrap {
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--row-color, var(--ink-mute)) 18%, transparent) 0%,
+    color-mix(in oklab, var(--row-color, var(--ink-mute)) 3%,  transparent) 100%);
+}
+.deck-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.deck-beats {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+}
+/* In free mode the static 8-beat grid isn't rendered (renderDeck omits it).
+   A dynamic per-row grid (`.deck-beats.free-beats`) is built/rebuilt by
+   rebuildFreeBeats whenever the row's audio span or BPM changes. */
+.deck-beat {
+  border-right: 1px dashed color-mix(in oklab, var(--ink-mute) 25%, transparent);
+  position: relative;
+}
+.deck-beat:last-child { border-right: none; }
+.deck-beat.bar-boundary {
+  border-right-style: solid;
+  border-right-color: color-mix(in oklab, var(--ink-mute) 60%, transparent);
+}
+.deck-beat .beat-num {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 9px;
+  color: var(--ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Per-row container that holds one or more start/end marker pairs */
+.deck-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Per-row sample start (green) / end (red) markers */
+.deck-start-bar, .deck-end-bar {
+  position: absolute;
+  top: 6%;
+  bottom: 6%;
+  width: 2px;
+  pointer-events: none;
+  display: none;
+  z-index: 2;
+}
+.deck-start-bar.on, .deck-end-bar.on { display: block; }
+.deck-start-bar {
+  background: #2ed573;
+  box-shadow: 0 0 6px rgba(46, 213, 115, 0.75), inset 0 0 0 0.5px rgba(255,255,255,0.4);
+}
+.deck-end-bar {
+  background: #ff4757;
+  box-shadow: 0 0 6px rgba(255, 71, 87, 0.75), inset 0 0 0 0.5px rgba(255,255,255,0.4);
+}
+
+/* Per-row playhead — one in each track's canvas-wrap. In shared timeline mode
+   all six are driven to the same position by the global Transport; in free mode
+   each is driven independently by its track's currently-playing voice. */
+.deck-row-playhead {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  box-shadow:
+    0 0 8px var(--accent),
+    0 0 22px color-mix(in oklab, var(--accent) 35%, transparent);
+  transform: translateX(0);
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  z-index: 3;
+}
+.deck-row-playhead.on { opacity: 0.95; }
+
+.deck-now-playing {
+  position: absolute;
+  top: 6px;
+  left: 64px;
+  font-size: 9px;
+  color: var(--ink-mute);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+
+/* ───── Toast & modal ───── */
+.toast-host {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 50;
+}
+.toast {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  animation: rise 0.18s ease-out;
+}
+@keyframes rise {
+  from { transform: translateY(6px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.modal-host {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 320px;
+  max-width: 480px;
+}
+.modal h3 { margin: 0 0 10px; font-weight: 500; font-size: 16px; }
+.modal p { color: var(--ink-dim); margin: 0 0 16px; font-size: 13px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modal input {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font: inherit;
+  margin-bottom: 14px;
+  outline: none;
+}
+.modal input:focus { border-color: var(--ink-mute); }
+
+/* Edit badge */
+.edit-badge {
+  position: fixed;
+  bottom: 8px;
+  right: 10px;
+  font-size: 10px;
+  color: var(--ink-mute);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 7px;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
+
+/* Portrait / narrow fallback */
+@media (max-width: 900px), (orientation: portrait) {
+  html, body { overflow: auto; }
+  #app { height: auto; min-height: 100vh; }
+  .editor { height: auto; }
+  .editor-body {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+  }
+  .side-stack { grid-template-rows: auto; }
+  .deck { min-height: 280px; }
+  .area { min-height: 160px; }
+}
