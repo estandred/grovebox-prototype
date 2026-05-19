@@ -1539,6 +1539,13 @@ a { color: inherit; text-decoration: none; }
 .deck-canvas-wrap {
   position: relative;
   overflow: hidden;
+  /* Force the wrap to span the full row height. Grid stretch should give
+     us this for free, but in some browsers the wrap collapses to canvas
+     intrinsic height (150px) when the row is shorter; explicit height
+     keeps it locked to the row, so the colored .deck-label border-left
+     to the left of it always lines up with the timeline canvas. */
+  height: 100%;
+  min-height: 0;
   /* When the deck is being resized via the corner handle, each canvas
      counter-scales its Y axis to stay at natural height. That can extend
      the waveform beyond the row's vertical box, so the deck-resize wrap
