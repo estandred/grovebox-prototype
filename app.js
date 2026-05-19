@@ -2956,9 +2956,12 @@ const Audio = (() => {
       // ensureToneSubChain() creates toneIn/toneOut and rewires:
       //   afterPump → toneIn → toneOut → output (replacing the direct
       //   afterPump → output connection).
+      // toneWrappers holds the external dry/wet split (input, dry, wet,
+      // output GainNodes) per effect — wet=0 = literal bypass.
       toneIn: null,
       toneOut: null,
       toneNodes: new Map(),
+      toneWrappers: new Map(),
       toneOrder: [],
     };
     trackChains.set(trackId, chain);
@@ -3039,28 +3042,53 @@ const Audio = (() => {
     try { node = def.create(window.Tone, ctx); }
     catch (err) { console.warn("[tone] create failed:", name, err); return null; }
     if (!node) return null;
-    // Find the node currently feeding toneOut (the "tail" of the sub-chain).
-    // Could be either a native GainNode (chain.toneIn on the very first
-    // insert) or another Tone effect (subsequent inserts).
-    const tail = chain.toneOrder.length === 0
-      ? chain.toneIn
-      : chain.toneNodes.get(chain.toneOrder[chain.toneOrder.length - 1]);
-    // Tone v14.9 does NOT patch AudioNode.prototype.connect, so calling
-    // a native .connect() with a Tone wrapper as the destination silently
-    // drops audio (no error — just no signal). On top of that,
-    // tone.input / tone.output are typically Tone.Gain wrappers, not raw
-    // AudioNodes, so a single dereference isn't enough. We drill all the
-    // way down to the underlying native AudioNode before connecting.
-    const tailOutNative = nativeOutputOf(tail);
+
+    // We DO NOT rely on Tone's internal dry/wet to bypass the effect when
+    // the user sets wet=0. Some Tone effects route the "dry" signal
+    // through their internal mixers in a way that subtly alters it
+    // (latency, phase, level), so "wet=0" doesn't sound identical to no
+    // effect at all. Instead we force Tone's internal wet to 1 and wrap
+    // each Tone node in an external parallel dry/wet split that matches
+    // the native-effect pattern:
+    //
+    //   wrapInput ──► wrapDry  (gain = 1 - wet)        ─┐
+    //         │                                        wrapOutput
+    //         └──► toneNode (wet=1) ──► wrapWet (= wet) ┘
+    //
+    // At user wet=0 the audio passes through wrapDry only — the Tone
+    // node's output is multiplied by 0 before summing, so its quirks
+    // can't reach the mix at all. At user wet=1 the dry branch is
+    // muted and only the processed signal reaches the output.
+    try { if (node.wet && "value" in node.wet) node.wet.value = 1; } catch {}
+
+    const wrapInput  = ctx.createGain();
+    const wrapDry    = ctx.createGain(); wrapDry.gain.value = 1;
+    const wrapWet    = ctx.createGain(); wrapWet.gain.value = 0;
+    const wrapOutput = ctx.createGain();
+    // Native-side wiring of the wrapper. node.input / node.output are
+    // Tone wrappers, so we drill down to the raw AudioNodes first.
     const nodeInNative  = nativeInputOf(node);
     const nodeOutNative = nativeOutputOf(node);
-    const toneOutNative = nativeInputOf(chain.toneOut);
-    try { tailOutNative.disconnect(toneOutNative); } catch {}
-    try { tailOutNative.connect(nodeInNative); }
-    catch (err) { console.warn("[tone] connect tail→node failed:", name, err); }
-    try { nodeOutNative.connect(toneOutNative); }
-    catch (err) { console.warn("[tone] connect node→toneOut failed:", name, err); }
+    wrapInput.connect(wrapDry);
+    wrapInput.connect(nodeInNative);
+    nodeOutNative.connect(wrapWet);
+    wrapDry.connect(wrapOutput);
+    wrapWet.connect(wrapOutput);
+
+    // Splice the wrapper into the existing tone sub-chain. The "tail" is
+    // whatever currently feeds toneOut — either chain.toneIn (first
+    // insert) or the previous wrapper's output (subsequent inserts).
+    const tail = chain.toneOrder.length === 0
+      ? chain.toneIn
+      : chain.toneWrappers.get(chain.toneOrder[chain.toneOrder.length - 1]).output;
+    try { tail.disconnect(chain.toneOut); } catch {}
+    try { tail.connect(wrapInput); }
+    catch (err) { console.warn("[tone] connect tail→wrapper failed:", name, err); }
+    try { wrapOutput.connect(chain.toneOut); }
+    catch (err) { console.warn("[tone] connect wrapper→toneOut failed:", name, err); }
+
     chain.toneNodes.set(name, node);
+    chain.toneWrappers.set(name, { input: wrapInput, dry: wrapDry, wet: wrapWet, output: wrapOutput });
     chain.toneOrder.push(name);
     return node;
   }
@@ -3099,17 +3127,29 @@ const Audio = (() => {
     if (!isToneEffect(name)) return;
     const node = ensureToneEffectInChain(trackId, name);
     if (!node) return;
+    const chain = trackChains.get(trackId);
     const t = (ctx && ctx.currentTime) || 0;
     const RAMP = 0.006;
     if (paramKey === "wet") {
+      // "wet" controls our EXTERNAL wrapper's parallel dry/wet — NOT
+      // Tone's internal wet (which we keep pinned at 1 in
+      // ensureToneEffectInChain). At v=0 the wet gain hits 0 and the
+      // dry gain hits 1, so the Tone node's output is completely muted
+      // and the original signal passes through unaltered.
+      const wrapper = chain && chain.toneWrappers.get(name);
+      if (!wrapper) return;
       const v = Math.max(0, Math.min(1, value));
-      try {
-        node.wet.cancelScheduledValues(t);
-        node.wet.setValueAtTime(node.wet.value, t);
-        node.wet.linearRampToValueAtTime(v, t + RAMP);
-      } catch {
-        try { node.wet.value = v; } catch {}
-      }
+      const snap = (param, target) => {
+        try {
+          param.cancelScheduledValues(t);
+          param.setValueAtTime(param.value, t);
+          param.linearRampToValueAtTime(target, t + RAMP);
+        } catch {
+          try { param.value = target; } catch {}
+        }
+      };
+      snap(wrapper.dry.gain, 1 - v);
+      snap(wrapper.wet.gain, v);
       return;
     }
     const def = TONE_EFFECTS[name];
