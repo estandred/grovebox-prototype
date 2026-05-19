@@ -1,0 +1,17 @@
+{
+  "cleanUrls": true,
+  "headers": [
+    {
+      "source": "/(app\\.js|style\\.css|index\\.html)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/songs/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    }
+  ]
+}

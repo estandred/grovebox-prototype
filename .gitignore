@@ -1,0 +1,15 @@
+# Local dev-only files — never ship these
+prefs.json
+.DS_Store
+
+# Editor / IDE noise
+.vscode/
+.idea/
+*.swp
+
+# Local Python venv if you ever add one
+.venv/
+__pycache__/
+
+# Vercel local cache (created if you ever run `vercel dev`)
+.vercel/

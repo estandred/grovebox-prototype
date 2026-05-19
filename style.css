@@ -39,6 +39,19 @@ body {
   letter-spacing: 0.01em;
   overscroll-behavior: none;
   touch-action: manipulation;
+  /* No text selection or long-press callout anywhere in the app — every
+     interaction is pointer-driven. Inputs are re-enabled below so the
+     user can still edit BPM, song name, etc. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+/* Text inputs / textareas / contenteditable elements need real text
+   selection so the user can type and edit values. */
+input, textarea, [contenteditable="true"], [contenteditable=""] {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 button { font: inherit; color: inherit; cursor: pointer; }
 a { color: inherit; text-decoration: none; }
@@ -76,10 +89,15 @@ a { color: inherit; text-decoration: none; }
 .home-title { font-size: 28px; margin: 0 0 22px; font-weight: 500; }
 
 .tile-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  /* Flex with center justification — tiles take their natural fixed width
+     and the row is centered horizontally regardless of how many tiles fit. */
+  display: flex;
+  flex-wrap: wrap;
   gap: 16px;
+  justify-content: center;
 }
+.tile-grid > .tile,
+.tile-grid > .tile.new { width: 180px; }
 .tile {
   aspect-ratio: 1 / 1;
   background: var(--panel);
@@ -105,6 +123,35 @@ a { color: inherit; text-decoration: none; }
   display: flex;
 }
 .tile-row-strip span { flex: 1; opacity: 0.5; }
+
+/* Right-click context menu for song tiles. Floats above everything. */
+.song-context-menu {
+  position: fixed;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 0;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  min-width: 140px;
+}
+.song-context-menu .context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.04em;
+}
+.song-context-menu .context-menu-item:hover {
+  background: color-mix(in oklab, var(--accent) 22%, var(--panel-2));
+  color: var(--ink);
+}
 
 .tile.new {
   background: transparent;
@@ -154,6 +201,22 @@ a { color: inherit; text-decoration: none; }
   height: 100vh;
   width: 100%;
   overflow: hidden;
+  /* Anchor for the edit-mode tint overlay (rule below). */
+  position: relative;
+}
+
+/* Edit-mode tint: a soft yellow wash over the entire viewport so it's
+   immediately obvious you're editing (and not performing). Fixed-position
+   pseudo so it covers everything including the resizable deck wrap;
+   pointer-events: none so it never intercepts taps. The mode-toggle
+   button + edit-mode header indicator are still legible through it. */
+.editor.edit-mode::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(255, 213, 64, 0.08);
+  pointer-events: none;
+  z-index: 50;
 }
 
 .editor-head {
@@ -168,34 +231,47 @@ a { color: inherit; text-decoration: none; }
 .head-left, .head-right { display: flex; align-items: center; gap: 10px; }
 .head-right { justify-content: flex-end; }
 
+/* Center column: stop-all sits here in both edit and perform mode so a
+   panic stop is always one tap away. */
+.editor-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .back-link {
   color: var(--ink-dim);
   font-size: 13px;
   padding: 6px 10px;
   border-radius: 8px;
+  flex-shrink: 0;
 }
 .back-link:hover { color: var(--ink); background: var(--panel-2); }
 
-.editor-title {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+/* Song title (perform mode = static span, edit mode = editable input)
+   now lives in the left column next to the back link. */
+.title-static {
   font-size: 15px;
   font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.editor-title input {
+.editor-title-input {
   background: transparent;
   border: none;
   color: var(--ink);
   font: inherit;
-  text-align: center;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
   outline: none;
-  padding: 4px 8px;
+  padding: 4px 6px;
   border-bottom: 1px dashed transparent;
-  min-width: 160px;
+  min-width: 120px;
 }
-.editor-title input:hover, .editor-title input:focus { border-bottom-color: var(--ink-mute); }
+.editor-title-input:hover, .editor-title-input:focus { border-bottom-color: var(--ink-mute); }
 
 .group {
   display: inline-flex;
@@ -222,6 +298,122 @@ a { color: inherit; text-decoration: none; }
   border-right: 1px solid var(--line);
   display: flex;
   align-items: center;
+}
+
+/* Gear icon button — opens the settings popup. Second-from-right in
+   the editor header (edit mode only). The button height matches the
+   adjacent .mode-toggle button: same vertical padding as the default
+   .btn (7px), with a font-size that fills that height nicely. The
+   .btn.settings-btn double-class beats the generic .btn { font-size:
+   12px } that sits later in this file. */
+.btn.settings-btn {
+  font-size: 22px;
+  line-height: 1;
+  padding: 4px 12px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Mode toggle button — always the rightmost control. Same dimensions in
+   both modes so the layout doesn't shift; only the tint changes. */
+.mode-toggle {
+  min-width: 110px;
+  text-align: center;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+/* Green when the click would put you into performance mode. */
+.mode-toggle.perform-target {
+  background: rgba(76, 175, 80, 0.18);
+  border-color: rgba(76, 175, 80, 0.5);
+  color: #6fc36f;
+}
+.mode-toggle.perform-target:hover {
+  background: rgba(76, 175, 80, 0.28);
+  color: #9ad99a;
+}
+/* Yellow when the click would put you into edit mode. */
+.mode-toggle.edit-target {
+  background: rgba(255, 193, 7, 0.18);
+  border-color: rgba(255, 193, 7, 0.5);
+  color: #ffd451;
+}
+.mode-toggle.edit-target:hover {
+  background: rgba(255, 193, 7, 0.28);
+  color: #ffe48a;
+}
+
+/* ───── Settings popup ───── */
+.modal.settings-modal { min-width: 400px; max-width: 520px; }
+/* Hide the "tap" button when the BPM selector appears in the settings
+   modal — keyboard / +/- controls are enough; the tap workflow doesn't
+   suit a setup popup. */
+.modal.settings-modal .bpm .tap { display: none; }
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+.settings-row-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--ink-dim);
+  letter-spacing: 0.06em;
+  min-width: 80px;
+  text-transform: lowercase;
+}
+.settings-row-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Waveform-height slider in the edit-mode header. Compact native range
+   input styled to fit alongside the other .group toggles. */
+.wave-h-group { align-items: center; }
+.wave-h-slider {
+  width: 90px;
+  height: 6px;
+  margin: 0 10px;
+  cursor: ew-resize;
+  appearance: none;
+  -webkit-appearance: none;
+  background: linear-gradient(to right,
+    color-mix(in oklab, var(--accent) 60%, var(--line)) 0,
+    color-mix(in oklab, var(--accent) 60%, var(--line)) 50%,
+    var(--line) 50%);
+  border-radius: 3px;
+  outline: none;
+}
+.wave-h-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 1px solid color-mix(in oklab, var(--accent) 50%, var(--line));
+  cursor: ew-resize;
+  margin-top: -4px;
+}
+.wave-h-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 1px solid color-mix(in oklab, var(--accent) 50%, var(--line));
+  cursor: ew-resize;
 }
 
 .btn {
@@ -323,12 +515,8 @@ a { color: inherit; text-decoration: none; }
 }
 .mode-badge.performance { color: var(--ok); }
 
-/* Performance mode: song title is non-editable text */
-.editor-title .title-static {
-  padding: 4px 8px;
-  font-size: 15px;
-  color: var(--ink);
-}
+/* (Legacy .editor-title wrapper removed — title now lives in head-left
+   beside the back link; .title-static is styled near the top of file.) */
 
 /* ───── Editor body: 3-column layout (areas | deck | areas) ───── */
 .editor-body {
@@ -357,18 +545,122 @@ a { color: inherit; text-decoration: none; }
   min-height: 0;
 }
 .area-head {
-  display: flex;
+  /* Three-column grid so the Mute/Stop pair stays optically centered on top
+     of the song part regardless of how wide the left (name/color/hide) or
+     right (tab toggle) groups grow. */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   margin-bottom: 8px;
   gap: 8px;
 }
+.area-head-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+}
+.area-head-center {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  justify-self: center;
+}
+.area-head-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+}
+
+/* Mute + Stop buttons — centered on top of every song part. Same width so
+   they read as a matched pair. Mute is a toggle; its active state tints
+   with --accent-2 so a muted track stands out at a glance. */
+.area-mute-btn,
+.area-stop-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in oklab, var(--row-color) 35%, var(--line));
+  border-radius: 4px;
+  color: #f0f0f3;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  min-width: 64px;
+  text-align: center;
+}
+.area-mute-btn:hover,
+.area-stop-btn:hover {
+  background: color-mix(in oklab, var(--row-color) 20%, rgba(255,255,255,0.1));
+  color: #fff;
+}
+.area-mute-btn.is-muted {
+  background: color-mix(in oklab, var(--accent-2, #ff4757) 30%, rgba(255,255,255,0.06));
+  border-color: color-mix(in oklab, var(--accent-2, #ff4757) 55%, var(--line));
+  color: var(--accent-2, #ff4757);
+}
 .area-name {
   font-size: 12px;
-  text-transform: lowercase;
   letter-spacing: 0.12em;
-  color: var(--ink);
+  /* Track names use the row color so the song-part identity is immediate.
+     Falls back to --ink if no row color is set (defensive). */
+  color: var(--row-color, var(--ink));
 }
+.area-name.editable {
+  cursor: text;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 4px;
+  transition: background 0.12s;
+}
+.area-name.editable:hover {
+  background: color-mix(in oklab, var(--row-color, var(--ink-mute)) 18%, transparent);
+}
+.area-color-swatch {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid color-mix(in oklab, var(--row-color, var(--ink-mute)) 50%, var(--line));
+  border-radius: 50%;
+  background: var(--row-color, var(--ink-mute));
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  overflow: hidden;
+}
+
+/* Hide-in-perform toggle button. Sits next to the color swatch in edit
+   mode only. Tint flips when the track is currently hidden. */
+.area-hide-toggle {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink-mute);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  padding: 3px 7px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.area-hide-toggle:hover { color: var(--ink); border-color: var(--ink-mute); }
+.area-hide-toggle.is-hidden {
+  background: color-mix(in oklab, var(--accent-2, #ff4757) 25%, rgba(255,255,255,0.06));
+  border-color: color-mix(in oklab, var(--accent-2, #ff4757) 45%, var(--line));
+  color: var(--accent-2, #ff4757);
+}
+
+/* Edit mode: faded look for tracks that won't appear in perform mode.
+   The opacity alone signals the hidden state — paired with the "show"/"hide"
+   button in the area header, no separate label is needed. */
+.area.hidden-in-perform { opacity: 0.55; }
+.area { position: relative; }
+.deck-row.hidden-in-perform { opacity: 0.45; }
+.area-color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.area-color-swatch::-webkit-color-swatch { border: none; border-radius: 50%; }
+.area-color-swatch::-moz-color-swatch     { border: none; border-radius: 50%; }
 .area-tabs {
   display: flex;
   gap: 4px;
@@ -397,19 +689,159 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 0 0 1px var(--row-color),
               0 0 8px color-mix(in oklab, var(--row-color) 50%, transparent);
 }
+
+/* Single tab toggle — replaces the two samples/effects buttons. The label
+   always shows the mode it will switch INTO, so the affordance is obvious
+   without needing an active state. */
+.area-tab-toggle {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in oklab, var(--row-color) 35%, var(--line));
+  border-radius: 4px;
+  color: #f0f0f3;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  padding: 4px 10px 4px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  min-width: 96px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.area-tab-toggle:hover {
+  background: color-mix(in oklab, var(--row-color) 20%, rgba(255,255,255,0.1));
+  color: #fff;
+}
+.area-tab-toggle-label {
+  flex: 1;
+  text-align: center;
+}
+.area-tab-toggle-chevron {
+  display: inline-block;
+  font-size: 14px;
+  line-height: 1;
+  color: color-mix(in oklab, var(--row-color) 70%, var(--ink));
+  font-weight: 700;
+  transform: translateY(-1px);
+}
+
+/* Muted state. The waveform stays visible but dims so the muted row is
+   clearly distinct. The playhead and beat markers keep their normal look
+   so the user can still see the timeline moving while the audio is silent. */
+.deck-row.muted .deck-canvas-wrap canvas { opacity: 0.35; }
+.area.muted .deck-canvas-wrap canvas     { opacity: 0.35; }
 /* ───── Per-track effects panel ───── */
-/* Knob grid: 6 columns × 2 rows. Holds up to 12 effects (vocals = 11 with
-   robot, others = 10 — leaves 1–2 empty cells at the end). Even spread
-   across the rectangle, no scrolling. */
+/* Wrap-flex layout so the knobs always center horizontally + vertically
+   within the panel, and a short second row sits below the first row
+   centered (rather than left-aligned with a hole on the right). The
+   container fills the panel; flex-wrap + justify-content: center handles
+   the row distribution; align-content: center stacks the rows vertically
+   in the middle. */
 .area-effects {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  grid-template-rows: 1fr 1fr;
-  gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: center;
+  gap: 8px 10px;
   flex: 1;
   min-height: 0;
   padding: 2px;
-  place-items: center;
+}
+/* Fixed cell width so the knobs stay uniform regardless of how many are
+   shown — flex-wrap decides when to wrap based on this width. Sized so
+   6 knobs comfortably fit in one row at typical area widths; if there
+   are more, they spill onto a second row that justify-content centers. */
+.effect-knob-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: clamp(48px, 13%, 80px);
+  aspect-ratio: 1 / 1;
+}
+/* × button in the corner of every knob cell — edit mode only. Always
+   visible (no hover requirement) since the tablet has no hover state. */
+.effect-knob-remove {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--line);
+  color: var(--ink-mute);
+  font-size: 12px;
+  line-height: 1;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: inherit;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  z-index: 1;
+}
+.effect-knob-remove:hover {
+  color: var(--accent-2, #ff4757);
+  border-color: color-mix(in oklab, var(--accent-2, #ff4757) 55%, var(--line));
+  background: color-mix(in oklab, var(--accent-2, #ff4757) 18%, rgba(0,0,0,0.55));
+}
+
+/* Effects-tab body in edit mode: knob grid on the left, "+" button on
+   the right edge of the panel vertically centered. The wrap keeps both
+   children inside the same flex row so the + sits beside the grid (not
+   inside it) and aligns to the grid's vertical center. */
+.area-effects-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+.area-effects-wrap .area-effects {
+  flex: 1;
+  min-width: 0;
+}
+/* Vertical stack of side controls: reset (always) + add-knob (edit). */
+.area-effects-side {
+  display: flex;
+  flex-direction: column;
+  align-self: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.area-add-knob-side-btn,
+.area-reset-knobs-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid color-mix(in oklab, var(--row-color, var(--ink-mute)) 35%, var(--line));
+  color: color-mix(in oklab, var(--row-color, var(--ink)) 70%, var(--ink));
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  font-family: inherit;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+.area-add-knob-side-btn { font-size: 20px; }
+.area-reset-knobs-btn   { font-size: 18px; }
+.area-add-knob-side-btn:hover,
+.area-reset-knobs-btn:hover {
+  background: color-mix(in oklab, var(--row-color, var(--ink-mute)) 20%, rgba(255,255,255,0.1));
+  border-color: var(--row-color, var(--ink-mute));
+  color: #fff;
 }
 .knob {
   display: flex;
@@ -464,18 +896,32 @@ a { color: inherit; text-decoration: none; }
 .knob-value { display: none; }
 
 /* ───── Per-effect parameter editor (zoom view) ───── */
-.area-head.effect-zoom-head { align-items: center; }
+/* Override the 3-col grid layout that .area-head uses by default — in the
+   zoom-head case (back button + effect name) we want a tight flex row so
+   the back button sizes to its content instead of stretching across a 1fr
+   column. */
+.area-head.effect-zoom-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
 .effect-back-btn {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid color-mix(in oklab, var(--row-color) 35%, var(--line));
   border-radius: 4px;
   color: #f0f0f3;
   font-size: 11px;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: lowercase;
-  padding: 4px 10px;
+  /* Sized to content. */
+  padding: 3px 6px;
+  line-height: 1;
   cursor: pointer;
   font-family: inherit;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
 }
 .effect-back-btn:hover {
   background: color-mix(in oklab, var(--row-color) 20%, rgba(255,255,255,0.1));
@@ -669,6 +1115,94 @@ a { color: inherit; text-decoration: none; }
   min-height: 0;
 }
 
+/* ───── Banked tracks (vocals): chevrons on the sides, bank name banner ───── */
+.area-banks-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 4px;
+}
+.bank-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  user-select: none;
+}
+.bank-name-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: color-mix(in oklab, var(--row-color, var(--ink-mute)) 70%, var(--ink));
+  user-select: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.bank-name-label.editable {
+  cursor: text;
+  transition: background 0.12s, color 0.12s;
+  /* Guarantee a clickable hitbox even when the label is empty. */
+  min-width: 28px;
+  min-height: 14px;
+  display: inline-block;
+  text-align: center;
+}
+.bank-name-label.editable:hover {
+  background: color-mix(in oklab, var(--row-color, var(--ink-mute)) 16%, transparent);
+  color: var(--ink);
+}
+.bank-add,
+.bank-remove {
+  background: transparent;
+  border: 1px solid color-mix(in oklab, var(--row-color, var(--ink-mute)) 35%, var(--line));
+  color: color-mix(in oklab, var(--row-color, var(--ink-mute)) 80%, var(--ink));
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 7px 3px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.bank-add:hover {
+  background: color-mix(in oklab, var(--row-color, var(--ink-mute)) 25%, rgba(255,255,255,0.05));
+  color: var(--ink);
+}
+.bank-remove {
+  color: color-mix(in oklab, var(--ink-mute) 80%, var(--ink));
+}
+.bank-remove:hover {
+  background: color-mix(in oklab, var(--accent-2, #ff4757) 25%, rgba(255,255,255,0.05));
+  border-color: color-mix(in oklab, var(--accent-2, #ff4757) 50%, var(--line));
+  color: var(--accent-2, #ff4757);
+}
+.area-pads-with-chevrons {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  gap: 4px;
+}
+.area-pads-with-chevrons .area-pads { flex: 1; }
+.bank-chevron {
+  background: transparent;
+  border: none;
+  color: color-mix(in oklab, var(--row-color, var(--ink-mute)) 55%, var(--ink-mute));
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  font-family: inherit;
+  transition: color 0.12s;
+  flex-shrink: 0;
+  min-width: 18px;
+}
+.bank-chevron:hover { color: var(--ink); }
+.bank-chevron:active { transform: scale(0.95); }
+
 .pad {
   background: var(--panel-2);
   border: 1px solid var(--line);
@@ -685,6 +1219,18 @@ a { color: inherit; text-decoration: none; }
   min-height: 0;
 }
 .pad:hover { border-color: var(--ink-mute); }
+/* When the song's "hide empty pads" option is on, empty pads in performance
+   mode become invisible — no bg, no border, no hover, no pointer events —
+   so the song shows only loaded pads. They keep their grid slot so the
+   loaded pads don't shift around. Edit mode always shows them. */
+.editor.hide-empty-pads .pad:not(.loaded):not(.edit) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  pointer-events: none;
+  cursor: default;
+}
+.editor.hide-empty-pads .pad:not(.loaded):not(.edit):hover { border-color: transparent; }
 .pad.loaded {
   background:
     linear-gradient(180deg,
@@ -704,10 +1250,11 @@ a { color: inherit; text-decoration: none; }
   border-color: var(--accent);
   background: color-mix(in oklab, var(--accent) 12%, var(--panel-2));
 }
-.pad-name {
+.pad-name,
+.pad-emoji {
   /* Initial font-size is just a seed; fitPadName() picks the largest size
      (within [8px, 28px]) that fits the pad's content box, wrapping onto
-     2 or 3 lines as needed to show the full name. */
+     2 or 3 lines as needed to show the full label. */
   font-size: 16px;
   color: var(--ink-dim);
   max-width: 100%;
@@ -720,9 +1267,54 @@ a { color: inherit; text-decoration: none; }
   font-weight: 500;
   line-height: 1.1;
 }
-.pad.loaded .pad-name { color: var(--ink); }
-.pad.edit .pad-name { cursor: text; }
-.pad.edit .pad-name:hover { color: var(--accent); }
+.pad.loaded .pad-name,
+.pad.loaded .pad-emoji { color: var(--ink); }
+.pad.edit .pad-name,
+.pad.edit .pad-emoji { cursor: text; }
+.pad.edit .pad-name:hover,
+.pad.edit .pad-emoji:hover { color: var(--accent); }
+
+/* Drawing label wrapper — fills the pad edge-to-edge so the user-chosen
+   background colour (when not transparent) shows across the whole pad
+   instead of just the bounding box of the strokes image. */
+.pad-draw-wrap {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--pad-radius);
+  overflow: hidden;
+}
+.pad-draw {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.pad.edit .pad-draw-wrap.editable { cursor: pointer; outline: 1px dashed transparent; }
+.pad.edit .pad-draw-wrap.editable:hover { outline-color: var(--accent); }
+
+/* Preview inside the pad-label modal: a small pad-shaped element with the
+   row-color gradient so the user sees the drawing on its real backdrop. */
+.pad-draw-preview-wrap {
+  width: 110px;
+  height: 90px;
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--row-color, var(--ink-mute)) 26%, var(--panel-2)) 0%,
+    var(--panel-2) 100%);
+  border: 1px solid color-mix(in oklab, var(--row-color, var(--ink-mute)) 45%, var(--line));
+  border-radius: var(--pad-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.pad-draw-preview-canvas {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
 .pad-placeholder { font-size: 10px; color: var(--ink-mute); letter-spacing: 0.04em; }
 .pad-clear {
   position: absolute;
@@ -739,8 +1331,8 @@ a { color: inherit; text-decoration: none; }
 .pad:hover .pad-clear { opacity: 1; }
 .pad-clear:hover { color: var(--accent-2); }
 
-/* Edit-mode pad: three stacked toggles compacted to fit small pads */
-.pad.edit { padding-bottom: 52px; }
+/* Edit-mode pad: four stacked toggles compacted to fit small pads */
+.pad.edit { padding-bottom: 70px; }
 .pad-edit-controls {
   position: absolute;
   left: 5px;
@@ -753,7 +1345,8 @@ a { color: inherit; text-decoration: none; }
 }
 .pad-mode-toggle,
 .pad-interact-toggle,
-.pad-retap-toggle {
+.pad-retap-toggle,
+.pad-quantize-toggle {
   display: flex;
   width: 100%;
   background: rgba(0, 0, 0, 0.45);
@@ -766,7 +1359,8 @@ a { color: inherit; text-decoration: none; }
 }
 .pad-mode-toggle button,
 .pad-interact-toggle button,
-.pad-retap-toggle button {
+.pad-retap-toggle button,
+.pad-quantize-toggle button {
   flex: 1;
   background: transparent;
   border: none;
@@ -783,16 +1377,19 @@ a { color: inherit; text-decoration: none; }
 }
 .pad-mode-toggle button:hover,
 .pad-interact-toggle button:hover,
-.pad-retap-toggle button:hover { color: var(--ink); }
+.pad-retap-toggle button:hover,
+.pad-quantize-toggle button:hover { color: var(--ink); }
 .pad-mode-toggle button.active,
 .pad-interact-toggle button.active,
-.pad-retap-toggle button.active {
+.pad-retap-toggle button.active,
+.pad-quantize-toggle button.active {
   background: var(--row-color);
   color: #0e0e10;
 }
 .pad-mode-toggle button.active:hover,
 .pad-interact-toggle button.active:hover,
-.pad-retap-toggle button.active:hover { color: #0e0e10; }
+.pad-retap-toggle button.active:hover,
+.pad-quantize-toggle button.active:hover { color: #0e0e10; }
 
 /* Performance mode: small static badges (loop/shot, and "solo" if applicable) */
 .pad-indicators {
@@ -827,6 +1424,93 @@ a { color: inherit; text-decoration: none; }
   position: relative;
   min-height: 0;
 }
+/* Resize wrapper around .deck. The wrap's dimensions are set inline by JS
+   to match the scaled deck so the surrounding grid sees the new size and
+   the handle sits at the visible corner. */
+.deck-resize-wrap {
+  position: relative;
+  min-height: 0;
+  /* At scale=1 inherit the default `stretch` so the wrap fills its grid
+     cell (the deck's inner `grid-template-rows: repeat(6, 1fr)` needs a
+     concrete height). When scaled, JS adds .scaled so `justify-self: center`
+     kicks in and the deck stays horizontally centred within the editor body
+     — empty space distributes evenly to the left + right of the smaller
+     timeline. */
+}
+.deck-resize-wrap.scaled {
+  justify-self: center;
+}
+/* When the timeline area is scaled down, the canvas inside each row uses
+   transform: scaleY(1/scale) to maintain its natural height. Allow that
+   overflow to be visible (instead of clipped by the row + canvas-wrap),
+   otherwise the user would see only a slice of the waveform. */
+.deck-resize-wrap.scaled .deck-row,
+.deck-resize-wrap.scaled .deck-canvas-wrap {
+  overflow: visible;
+}
+/* When scale === 1 the deck has no inline width/height, so it fills the
+   wrap via this CSS. Once the user resizes (inline width/height set on the
+   deck), these defaults stop applying. */
+.deck-resize-wrap > .deck {
+  width: 100%;
+  height: 100%;
+}
+.deck-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 50;
+  /* Three diagonal hash lines so it reads as a resize grip. */
+  background:
+    linear-gradient(135deg,
+      transparent 0 35%,
+      var(--ink-mute) 35% 42%,
+      transparent 42% 55%,
+      var(--ink-mute) 55% 62%,
+      transparent 62% 75%,
+      var(--ink-mute) 75% 82%,
+      transparent 82%);
+  border-bottom-right-radius: var(--radius);
+}
+.deck-resize-handle:hover {
+  background:
+    linear-gradient(135deg,
+      transparent 0 35%,
+      var(--ink) 35% 42%,
+      transparent 42% 55%,
+      var(--ink) 55% 62%,
+      transparent 62% 75%,
+      var(--ink) 75% 82%,
+      transparent 82%);
+}
+
+/* Reset-to-default-size button. Hidden by default; the JS adds .visible
+   when scale !== 1, so the UI stays clean at 100%. */
+.deck-resize-reset {
+  position: absolute;
+  right: 22px;
+  bottom: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink-dim);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  display: none;
+  z-index: 51;
+}
+.deck-resize-reset.visible { display: inline-block; }
+.deck-resize-reset:hover {
+  background: color-mix(in oklab, var(--accent) 25%, rgba(255, 255, 255, 0.08));
+  color: var(--ink);
+  border-color: var(--ink-mute);
+}
 .deck-row {
   position: relative;
   display: grid;
@@ -843,15 +1527,22 @@ a { color: inherit; text-decoration: none; }
   justify-content: center;
   font-size: 10px;
   letter-spacing: 0.1em;
-  text-transform: lowercase;
   color: var(--ink-dim);
   background: var(--panel-2);
   border-right: 1px solid var(--line);
   border-left: 3px solid var(--row-color, var(--ink-mute));
+  /* Always span the full row height so the colored left-border lines
+     up exactly with the timeline canvas to its right. */
+  height: 100%;
+  box-sizing: border-box;
 }
 .deck-canvas-wrap {
   position: relative;
   overflow: hidden;
+  /* When the deck is being resized via the corner handle, each canvas
+     counter-scales its Y axis to stay at natural height. That can extend
+     the waveform beyond the row's vertical box, so the deck-resize wrap
+     overrides the clip below — full visibility while resized. */
   /* Faded row-color tint — matches the pad gradient (tinted at top, fading
      out toward the bottom) so timelines feel visually consistent with the
      pad areas. Applied in both view modes; freq view layers a stronger
@@ -1098,6 +1789,201 @@ a { color: inherit; text-decoration: none; }
   color: var(--ink-dim);
 }
 
+/* ───── Pad label modal: text / draw / emoji ───── */
+.modal.pad-label-modal { min-width: 360px; max-width: 420px; }
+.pad-label-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.pad-label-tab {
+  flex: 1;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-dim);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pad-label-tab:hover { color: var(--ink); }
+.pad-label-tab.active {
+  background: var(--accent);
+  color: #0e0e10;
+  border-color: var(--accent);
+}
+.pad-label-body { margin-bottom: 14px; }
+.pad-label-body input[type="text"] {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font: inherit;
+  outline: none;
+  margin-bottom: 8px;
+}
+
+/* Draw mode */
+.pad-draw-canvas {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  /* Checkerboard backdrop so any transparent pixels in the user's drawing
+     are visually obvious (vs solid-color backgrounds, which fully cover it). */
+  background-color: #1a1a1c;
+  background-image:
+    linear-gradient(45deg, #25252a 25%, transparent 25%),
+    linear-gradient(-45deg, #25252a 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #25252a 75%),
+    linear-gradient(-45deg, transparent 75%, #25252a 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: block;
+  touch-action: none;
+  cursor: crosshair;
+}
+.draw-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.draw-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.draw-toolbar-label {
+  font-size: 10px;
+  color: var(--ink-mute);
+  text-transform: lowercase;
+  letter-spacing: 0.08em;
+  min-width: 36px;
+}
+.draw-colors,
+.draw-bgs {
+  display: flex;
+  gap: 5px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.draw-color-swatch,
+.draw-bg-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  background-clip: padding-box;
+}
+.draw-color-swatch.active,
+.draw-bg-swatch.active { border-color: var(--accent); transform: scale(1.1); }
+/* Transparent swatch — diagonal red slash on a checkerboard so it's clearly
+   "no background" rather than just a default color. */
+.draw-bg-swatch.transparent {
+  background-color: #2a2a2c;
+  background-image:
+    linear-gradient(45deg, #3a3a3c 25%, transparent 25%),
+    linear-gradient(-45deg, #3a3a3c 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #3a3a3c 75%),
+    linear-gradient(-45deg, transparent 75%, #3a3a3c 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+  position: relative;
+}
+.draw-bg-swatch.transparent::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: linear-gradient(45deg,
+    transparent calc(50% - 1px),
+    var(--accent-2, #ff4757) calc(50% - 1px),
+    var(--accent-2, #ff4757) calc(50% + 1px),
+    transparent calc(50% + 1px));
+}
+
+/* Emoji mode */
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  margin-top: 4px;
+}
+.emoji-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+  font-family: inherit;
+  line-height: 1;
+}
+.emoji-btn:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: var(--ink-mute);
+}
+
+/* ───── Library picker modal (network-loaded songs) ───── */
+.modal.library-modal { min-width: 380px; max-width: 500px; }
+.library-list {
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  margin-bottom: 14px;
+}
+.library-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+}
+.library-row:last-child { border-bottom: none; }
+.library-name {
+  flex: 1;
+  color: var(--ink);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.library-status {
+  color: var(--ink-mute);
+  font-size: 11px;
+  min-width: 80px;
+  text-align: right;
+}
+.library-delete {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink-mute);
+  font-size: 14px;
+  line-height: 1;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.library-delete:hover {
+  background: color-mix(in oklab, var(--accent-2, #ff4757) 22%, rgba(255,255,255,0.04));
+  border-color: color-mix(in oklab, var(--accent-2, #ff4757) 50%, var(--line));
+  color: var(--accent-2, #ff4757);
+}
+.library-delete:disabled { opacity: 0.5; cursor: default; }
+
 /* Edit badge */
 .edit-badge {
   position: fixed;
@@ -1125,4 +2011,937 @@ a { color: inherit; text-decoration: none; }
   .side-stack { grid-template-rows: auto; }
   .deck { min-height: 280px; }
   .area { min-height: 160px; }
+}
+
+/* ───── Perform-mode tab: 6 effect pads ───── */
+.perform-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  /* Center the square grid horizontally inside the area body so the
+     square pads don't stretch to fill the panel width. */
+  align-items: center;
+  justify-content: center;
+}
+.perform-pads {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  grid-template-rows: repeat(2, auto);
+  /* Roomy gap so the pads breathe across the song-part panel without
+     making the squares themselves any bigger. */
+  gap: 22px;
+  max-width: 100%;
+  max-height: 100%;
+}
+.perform-pad {
+  position: relative;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--pad-radius);
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  overflow: hidden;
+  color: var(--ink-dim);
+  font-family: inherit;
+  transition: transform 0.06s, box-shadow 0.12s, border-color 0.12s, background 0.12s;
+  /* Square shape — visually distinct from the wider sample pads.
+     15% smaller than before so the effects layout breathes more on
+     the song-part panel. */
+  width: clamp(48px, 10.2vw, 82px);
+  aspect-ratio: 1 / 1;
+}
+.perform-pad:hover { border-color: var(--ink-mute); }
+.perform-pad.loaded {
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, var(--row-color) 26%, var(--panel-2)) 0%,
+      var(--panel-2) 100%);
+  border-color: color-mix(in oklab, var(--row-color) 45%, var(--line));
+}
+.perform-pad.active {
+  border-color: var(--row-color);
+  box-shadow:
+    0 0 0 2px color-mix(in oklab, var(--row-color) 55%, transparent),
+    0 6px 22px rgba(0,0,0,0.4);
+  transform: translateY(-1px);
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, var(--row-color) 45%, var(--panel-2)) 0%,
+      color-mix(in oklab, var(--row-color) 15%, var(--panel-2)) 100%);
+}
+.perform-pad.empty {
+  background: transparent;
+  border-style: dashed;
+  border-color: color-mix(in oklab, var(--ink-mute) 35%, var(--line));
+  color: color-mix(in oklab, var(--ink-mute) 60%, transparent);
+}
+.perform-pad.empty.edit:hover {
+  border-color: color-mix(in oklab, var(--row-color, var(--ink-mute)) 60%, var(--line));
+  background: color-mix(in oklab, var(--row-color, var(--ink-mute)) 10%, transparent);
+  color: var(--ink);
+}
+.perform-pad.empty[disabled] { cursor: default; }
+.perform-pad-plus {
+  font-size: 28px;
+  font-weight: 300;
+  line-height: 1;
+}
+.perform-pad-effect {
+  /* font-size is a seed; fitPadName() picks the largest size (within
+     [8px, 28px]) that fits inside the pad's content box, wrapping the
+     label onto 2 lines if a single line is too narrow. */
+  font-size: 13px;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  color: color-mix(in oklab, var(--row-color, var(--ink)) 70%, var(--ink));
+  font-weight: 500;
+  text-align: center;
+  text-transform: lowercase;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.perform-pad-mode-indicator {
+  font-size: 12px;
+  color: color-mix(in oklab, var(--ink-mute) 70%, transparent);
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  pointer-events: none;
+}
+.perform-pad.mode-toggle .perform-pad-mode-indicator { color: var(--accent, #62d4ff); }
+
+/* ───── Perform-pad inline parameter editor ───── */
+.perform-pad-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.perform-pad-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 2px 0;
+}
+.perform-mode-toggle-group {
+  display: flex;
+  gap: 4px;
+}
+.perform-mode-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink-mute);
+  font-size: 11px;
+  font-family: inherit;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.perform-mode-btn:hover { color: var(--ink); border-color: var(--ink-mute); }
+.perform-mode-btn.active {
+  background: var(--row-color);
+  border-color: var(--row-color);
+  color: #0e0e10;
+}
+.perform-pad-editor-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+.perform-pad-test {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid color-mix(in oklab, var(--row-color, var(--ink-mute)) 35%, var(--line));
+  color: color-mix(in oklab, var(--row-color, var(--ink)) 70%, var(--ink));
+  font-size: 11px;
+  font-family: inherit;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  padding: 5px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.perform-pad-test:hover {
+  border-color: var(--row-color);
+  color: var(--ink);
+}
+.perform-pad-test.active {
+  background: var(--row-color);
+  border-color: var(--row-color);
+  color: #0e0e10;
+  box-shadow:
+    0 0 0 2px color-mix(in oklab, var(--row-color) 55%, transparent),
+    0 6px 22px rgba(0,0,0,0.4);
+}
+.perform-pad-remove {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  color: var(--ink-mute);
+  font-size: 11px;
+  font-family: inherit;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.perform-pad-remove:hover {
+  background: color-mix(in oklab, var(--accent-2, #ff4757) 20%, rgba(255,255,255,0.05));
+  border-color: color-mix(in oklab, var(--accent-2, #ff4757) 45%, var(--line));
+  color: var(--accent-2, #ff4757);
+}
+
+/* ───── Effect picker modal ───── */
+.effect-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.effect-picker-dialog {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 360px;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.effect-picker-title {
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  text-align: center;
+  text-transform: lowercase;
+}
+.effect-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+/* Shown in place of the grid when nothing's available to add — keeps
+   the picker dialog informative instead of just blank. */
+.effect-picker-empty {
+  color: var(--ink-mute);
+  font-size: 12px;
+  text-align: center;
+  padding: 24px 12px;
+  line-height: 1.4;
+}
+.effect-picker-item {
+  aspect-ratio: 1 / 1;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-dim);
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  text-align: center;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.effect-picker-item:hover {
+  border-color: var(--ink-mute);
+  background: color-mix(in oklab, var(--ink-mute) 12%, var(--panel-2));
+  color: var(--ink);
+}
+.effect-picker-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+.effect-picker-cancel {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-mute);
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.effect-picker-cancel:hover {
+  color: var(--ink);
+  border-color: var(--ink-mute);
+}
+
+/* ───── MIDI mapping mode ───── */
+/* Blue wash over the entire viewport, matching the yellow edit-mode
+   tint pattern. Sits above content (z-index 50) but below modals so
+   the mapping list dialog isn't tinted. */
+.editor.midi-mapping-mode::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(64, 156, 255, 0.10);
+  pointer-events: none;
+  z-index: 50;
+}
+/* Header banner shown in mapping mode in place of the editor controls. */
+.editor-head.midi-mapping {
+  background: color-mix(in oklab, #409cff 18%, var(--panel));
+}
+.midi-mapping-banner {
+  font-size: 13px;
+  color: color-mix(in oklab, #409cff 65%, var(--ink));
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+/* Element in mapping mode — keep the existing colors but signal that
+   taps no longer trigger the action. Selected (waiting-for-key)
+   element pulses blue. Applies to all mappable controls: sample pads,
+   perform pads, the global stop-all button, and per-track stop btns. */
+.pad.midi-mappable,
+.perform-pad.midi-mappable,
+.area-stop-btn.midi-mappable,
+.btn.stop-all-btn.midi-mappable {
+  outline: 1px dashed rgba(64, 156, 255, 0.45);
+  outline-offset: -3px;
+  position: relative;
+}
+.pad.midi-map-selected,
+.perform-pad.midi-map-selected,
+.area-stop-btn.midi-map-selected,
+.btn.stop-all-btn.midi-map-selected {
+  outline: 2px solid #409cff;
+  outline-offset: -2px;
+  box-shadow: 0 0 0 3px color-mix(in oklab, #409cff 40%, transparent),
+              0 6px 22px rgba(0, 0, 0, 0.4);
+  animation: midi-map-pulse 1s ease-in-out infinite;
+}
+@keyframes midi-map-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklab, #409cff 40%, transparent),
+                          0 6px 22px rgba(0, 0, 0, 0.4); }
+  50%      { box-shadow: 0 0 0 7px color-mix(in oklab, #409cff 25%, transparent),
+                          0 6px 22px rgba(0, 0, 0, 0.4); }
+}
+/* Small badge showing the currently-mapped MIDI note on each pad. */
+.pad-midi-note {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: rgba(64, 156, 255, 0.85);
+  padding: 1px 5px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Mapping list modal styling. */
+.modal.midi-map-modal,
+.modal.midi-settings-modal { min-width: 400px; max-width: 560px; }
+
+/* Sectioned layout inside the unified MIDI settings modal — each
+   section is a titled block with a head row + the content underneath. */
+.midi-section {
+  margin-bottom: 16px;
+}
+.midi-section:last-of-type { margin-bottom: 0; }
+.midi-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.midi-section-title {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.midi-section-empty {
+  color: var(--ink-mute);
+  font-size: 12px;
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
+/* "clear all" mini button next to the mappings title. */
+.btn.ghost.small { font-size: 11px; padding: 3px 8px; }
+
+/* Device list rows: checkbox + name + manufacturer. The whole row is
+   a <label> so tapping anywhere toggles the checkbox. */
+.midi-device-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.midi-device-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ink);
+}
+.midi-device-row:last-child { border-bottom: none; }
+.midi-device-row:hover { background: rgba(255, 255, 255, 0.03); }
+.midi-device-checkbox {
+  /* Lightly restyled native checkbox — the device list reads cleaner
+     than a custom toggle and respects the OS dark-mode preference. */
+  width: 16px;
+  height: 16px;
+  accent-color: #409cff;
+  margin: 0;
+  cursor: pointer;
+}
+.midi-device-name {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.midi-device-manufacturer {
+  color: var(--ink-mute);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.midi-map-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 360px;
+  overflow-y: auto;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.midi-map-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+}
+.midi-map-row:last-child { border-bottom: none; }
+.midi-map-label {
+  color: var(--ink);
+  font-size: 12px;
+}
+.midi-map-note {
+  font-size: 12px;
+  color: color-mix(in oklab, #409cff 70%, var(--ink));
+  font-family: var(--mono);
+}
+.midi-map-remove {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-mute);
+  font-size: 14px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.midi-map-remove:hover {
+  color: var(--accent-2, #ff4757);
+  border-color: color-mix(in oklab, var(--accent-2, #ff4757) 50%, var(--line));
+}
+
+/* ───── MIDI monitor modal ───── */
+.modal.midi-monitor-modal { min-width: 440px; max-width: 620px; }
+
+/* "now pressing" — chips that highlight the currently-held notes. */
+.midi-monitor-active {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 38px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+}
+.midi-monitor-active-key {
+  background: color-mix(in oklab, #409cff 60%, var(--panel));
+  border: 1px solid color-mix(in oklab, #409cff 70%, var(--line));
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.midi-monitor-active-num {
+  font-size: 10px;
+  opacity: 0.75;
+}
+.midi-monitor-empty {
+  color: var(--ink-mute);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* History list — scrollable, fixed height, newest at the top. */
+.midi-monitor-history {
+  display: flex;
+  flex-direction: column;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.midi-monitor-row {
+  display: grid;
+  grid-template-columns: 60px 40px 60px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+}
+.midi-monitor-row:last-child { border-bottom: none; }
+.midi-monitor-row-note { color: color-mix(in oklab, #409cff 70%, var(--ink)); }
+/* CC rows get an orange tint so untranslated control changes stand
+   apart from regular note presses — useful when diagnosing which
+   buttons on a controller send CC vs notes. */
+.midi-monitor-row.cc .midi-monitor-row-note { color: #f59e0b; }
+.midi-monitor-row.cc { background: rgba(245, 158, 11, 0.06); }
+.midi-monitor-row-num  { color: var(--ink-mute); }
+.midi-monitor-row-vel  { color: var(--ink-mute); }
+.midi-monitor-row-dev  {
+  color: var(--ink-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+/* ───── MIDI color mapping modal ───── */
+.modal.midi-color-map-modal {
+  min-width: 640px;
+  max-width: 760px;
+}
+/* Side-by-side layout: grid on the left, palette+slider on the right.
+   Both columns fit on one screen height without scrolling. */
+.midi-color-map-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-height: 640px) {
+  /* Tight vertical screens: shrink the modal padding too. */
+  .modal.midi-color-map-modal { padding: 14px 18px; }
+}
+.midi-color-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+/* Big toggle button — ON is glowing blue (the controller is overriding
+   track colors); OFF is muted so the user can see at a glance which
+   mode is active. */
+.midi-color-map-toggle {
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  padding: 8px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  flex: 1;
+  text-align: center;
+}
+.midi-color-map-toggle.on {
+  background: color-mix(in oklab, #409cff 40%, var(--panel-2));
+  border-color: #409cff;
+  color: #fff;
+  box-shadow: 0 0 0 1px #409cff,
+              0 0 16px color-mix(in oklab, #409cff 50%, transparent);
+}
+.midi-color-map-toggle.off {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink-mute);
+}
+.midi-color-map-toggle.off:hover {
+  color: var(--ink);
+  border-color: var(--ink-mute);
+}
+
+/* The 9×9 grid — sized to be square so the cells stay square. Lays
+   out as a column of rows; each row is a flex strip of 9 cells. Sized
+   to fit comfortably in the left column of the side-by-side layout. */
+.lp-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px;
+  margin: 0;
+  max-width: 320px;
+}
+.lp-grid.disabled { opacity: 0.6; }
+.lp-grid-row {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 3px;
+}
+.lp-grid-cell {
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink-mute);
+  font-family: var(--mono);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 4px;
+  transition: border-color 0.12s, transform 0.06s;
+  position: relative;
+}
+/* Main 8×8 area: square pads. Round CC buttons (top row + right column)
+   render as circles so the visual matches the actual hardware. */
+.lp-grid-cell.round { border-radius: 50%; }
+.lp-grid-cell.corner { opacity: 0.7; }
+.lp-grid-cell:hover { border-color: var(--ink-mute); transform: translateY(-1px); }
+.lp-grid-cell.has-color {
+  /* Colored cells get a darker text so the number stays readable on
+     bright backgrounds. */
+  color: rgba(0, 0, 0, 0.7);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.lp-grid-cell-num {
+  pointer-events: none;
+  user-select: none;
+  font-size: 8px;
+  font-weight: 600;
+}
+.lp-grid-cell.dim:not(.has-color) { background: var(--panel); }
+
+/* ───── Inline color editor (lives next to the grid in side-by-side) ───── */
+.lp-picker-section-title {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin: 8px 0 4px;
+}
+.lp-palette {
+  display: grid;
+  /* Compact 12-col layout so all 24 swatches fit in 2 short rows and
+     the whole editor stays in view next to the grid. */
+  grid-template-columns: repeat(12, 1fr);
+  gap: 4px;
+}
+.lp-palette.disabled { opacity: 0.4; pointer-events: none; }
+.lp-palette-swatch {
+  aspect-ratio: 1 / 1;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.06s, border-color 0.12s;
+}
+.lp-palette-swatch:hover { transform: scale(1.08); }
+.lp-palette-swatch.selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4),
+              0 0 0 3px color-mix(in oklab, #fff 35%, transparent);
+}
+.lp-brightness-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.lp-brightness-slider {
+  flex: 1;
+  accent-color: #409cff;
+}
+.lp-brightness-slider[disabled] { opacity: 0.4; }
+.lp-brightness-value {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Inline editor panel — sits in the right column of the side-by-side
+   layout, no top separator needed since the gap is handled by the
+   parent grid. */
+.lp-inline-editor {
+  padding: 4px 0;
+}
+.lp-inline-editor.idle { opacity: 0.7; }
+.lp-inline-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.lp-inline-editor-title {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  font-family: var(--mono);
+}
+
+/* Selected-pad highlight on the grid — a clear blue ring so the user
+   knows which cell the editor is acting on. */
+.lp-grid-cell.selected {
+  outline: 2px solid #409cff;
+  outline-offset: 2px;
+  z-index: 1;
+}
+
+/* ───── Effects defaults modal ───── */
+/* The defaults modal uses the SAME inner editors as the song-part
+   screens — .effect-params for knob effects, .perform-pad-editor for
+   pad effects. No overrides; the layout matches the song-part exactly.
+   The modal just provides the surrounding chrome: tabs, body card,
+   small subheaders separating the two sections, and footer actions.
+   --row-color is set so the bars + knob dial pick up the accent tint
+   the same way they do inside a track's panel (where --row-color is
+   the track's color). Without this the bars would render against a
+   transparent base and look washed out. */
+.modal.fx-defaults-modal {
+  min-width: 560px;
+  max-width: 700px;
+  --row-color: #6ee59c;
+}
+.fx-defaults-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 12px 0;
+}
+.fx-defaults-tab {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  color: var(--ink-mute);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.fx-defaults-tab:hover { color: var(--ink); border-color: var(--ink-mute); }
+.fx-defaults-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0e0e10;
+}
+.fx-defaults-body {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel-2);
+}
+.fx-defaults-body.fixed-size {
+  min-height: 540px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.fx-defaults-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.fx-defaults-name {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  color: var(--ink);
+  font-weight: 500;
+}
+/* Small label between the two sections inside the body. */
+.fx-defaults-subheader {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin: 14px 0 6px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+}
+.fx-defaults-subheader:first-of-type {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+.fx-defaults-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 50%, transparent);
+}
+.fx-defaults-row:last-child { border-bottom: none; }
+.fx-defaults-row.stacked {
+  grid-template-columns: 140px 1fr;
+  align-items: start;
+}
+.fx-defaults-row.stacked .fx-defaults-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fx-defaults-label {
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+.fx-defaults-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fx-defaults-control .fx-defaults-row {
+  /* When a row is nested (automation pair) trim padding/border. */
+  padding: 2px 0;
+  border-bottom: none;
+  grid-template-columns: 110px 1fr;
+}
+.fx-defaults-slider {
+  flex: 1;
+  accent-color: #409cff;
+}
+.fx-defaults-value {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  min-width: 44px;
+  text-align: right;
+}
+.fx-defaults-choices {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Footer under the per-effect parameter editor (the zoomed-in view).
+   Holds the "save as default" snapshot button. */
+.effect-params-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+}
+.effect-save-default-btn {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+/* ───── Defaults-modal param-visibility checkbox ───── */
+.fx-defaults-row-with-vis {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: start;
+  gap: 10px;
+}
+.fx-defaults-vis-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  color: var(--ink-mute);
+  cursor: pointer;
+  padding-top: 2px;
+  user-select: none;
+}
+.fx-defaults-vis-label .fx-defaults-visibility {
+  width: 14px;
+  height: 14px;
+  accent-color: #6ee59c;
+  margin: 0;
+  cursor: pointer;
+}
+
+/* ───── "All parameters" popup (centered, opens from song-part) ───── */
+.all-params-host {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 250;
+}
+.modal.all-params-modal {
+  min-width: 520px;
+  max-width: 700px;
+}
+.modal.all-params-modal h3 {
+  margin-bottom: 6px;
+  text-transform: lowercase;
+  letter-spacing: 0.06em;
+}
+.all-params-body {
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel-2);
+  margin: 8px 0 12px;
 }

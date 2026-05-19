@@ -1,0 +1,13 @@
+# Local dev server — Vercel doesn't run it, the app falls back to
+# localStorage when /save-song and /prefs don't exist.
+serve.py
+
+# Local global prefs (laptop/tablet sync). Each visitor gets their own
+# defaults via localStorage; we don't ship the dev-machine's choices.
+prefs.json
+
+# Editor / system noise
+.DS_Store
+.vscode
+.idea
+*.swp
