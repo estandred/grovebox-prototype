@@ -2185,23 +2185,8 @@ const Audio = (() => {
       const Ctor = window.AudioContext || window.webkitAudioContext;
       try { ctx = new Ctor({ latencyHint: "interactive" }); }
       catch { ctx = new Ctor(); }
-      // Hand the same context to Tone.js so its effect nodes live in our
-      // audio graph (not Tone's own isolated context). Without this every
-      // Tone effect would output to a different destination and we'd hear
-      // nothing. Wrapped in try/catch so the app keeps running if Tone.js
-      // failed to load from the CDN.
-      try {
-        if (typeof window !== "undefined" && window.Tone) {
-          window.Tone.setContext(ctx);
-        }
-      } catch (err) {
-        console.warn("[tone] setContext failed", err);
-      }
     }
     if (ctx.state === "suspended") ctx.resume();
-    // Tone needs an explicit start() after a user-gesture-driven resume
-    // to ungate scheduling. Safe to call repeatedly.
-    try { if (window.Tone && window.Tone.start) window.Tone.start(); } catch {}
     return ctx;
   }
   function nowCtx() { return ensure(); }
@@ -2959,18 +2944,40 @@ const Audio = (() => {
     return chain;
   }
 
+  // One-time bridge between Tone.js and our AudioContext. Called lazily
+  // from ensureToneEffectInChain — only when the user actually engages
+  // a -tonejs effect. Doing this eagerly in ensure() caused all audio
+  // to go silent on some Tone versions because wrapping a running
+  // AudioContext disrupts existing graph connections; deferring it
+  // means native-only sessions never touch Tone's internals at all.
+  let _toneBound = false;
+  function bindToneToOurContext() {
+    if (_toneBound) return true;
+    if (typeof window === "undefined" || !window.Tone || !ctx) return false;
+    try {
+      window.Tone.setContext(ctx);
+      _toneBound = true;
+      return true;
+    } catch (err) {
+      console.warn("[tone] setContext failed", err);
+      return false;
+    }
+  }
+
   // Splice a Tone.js effect into the track's tone sub-chain. The lazy
   // approach keeps unused -tonejs effects at zero CPU cost. The first
   // time a given effect name is requested we:
-  //   1. Build the Tone node (via the TONE_EFFECTS registry).
-  //   2. Break the current trailing-edge connection (lastNode → toneOut).
-  //   3. Insert: lastNode → newNode → toneOut.
-  //   4. Remember the node + its position so we don't double-insert.
+  //   1. Bind Tone to our AudioContext (one-time, on first Tone use).
+  //   2. Build the Tone node (via the TONE_EFFECTS registry).
+  //   3. Break the current trailing-edge connection (lastNode → toneOut).
+  //   4. Insert: lastNode → newNode → toneOut.
+  //   5. Remember the node + its position so we don't double-insert.
   // Returns null if Tone.js isn't loaded (CDN failed) or the registry
   // doesn't recognize the name. Callers should bail silently in that case.
   function ensureToneEffectInChain(trackId, name) {
     if (typeof window === "undefined" || !window.Tone) return null;
     if (!isToneEffect(name)) return null;
+    if (!bindToneToOurContext()) return null;
     const chain = ensureTrackChain(trackId);
     if (!chain) return null;
     if (chain.toneNodes.has(name)) return chain.toneNodes.get(name);
