@@ -1667,6 +1667,30 @@ const PERFORM_PAD_PARAMS = {
   // robot: pads always trigger at full amount; no params to tweak.
   robot: [],
 };
+
+// Auto-generate perform-pad schemas for every Tone.js effect from its
+// knob schema (TONE_EFFECTS). Pads use single-point values (no main
+// knob, no automation), so each param is converted:
+//   - automation params (low/high)  → single value = defaultHigh ("fully
+//                                       engaged" target the knob would
+//                                       sweep to at max)
+//   - fader params (defaultValue)   → same single value
+//   - choice params (defaultValue)  → same single value + choices
+// Anything missing from TONE_EFFECTS just doesn't get a pad entry —
+// getPerformPadParamsDef already returns [] for unknown effects.
+for (const [name, def] of Object.entries(TONE_EFFECTS)) {
+  PERFORM_PAD_PARAMS[name] = def.params.map(p => {
+    if (p.type === "choice") {
+      return { key: p.key, label: p.label, type: "choice", default: p.defaultValue, choices: p.choices };
+    }
+    if (p.type === "fader") {
+      return { key: p.key, label: p.label, min: p.min, max: p.max, default: p.defaultValue };
+    }
+    // automation pair → use defaultHigh as the pad's single-shot value
+    return { key: p.key, label: p.label, min: p.min, max: p.max, default: p.defaultHigh };
+  });
+}
+
 function getPerformPadParamsDef(effect) {
   return PERFORM_PAD_PARAMS[effect] || [];
 }
@@ -5836,6 +5860,18 @@ function makePerformFaderRow(opts) {
 function applyPerformPadAudio(trackId, pad) {
   if (!pad || !pad.effect) return;
   const p = { ...(pad.params || {}) };
+  // Tone.js effects: route each param straight through the Tone bridge.
+  // applyChainParams' native switch doesn't know about Tone, so we
+  // dispatch here. The defaults from PERFORM_PAD_PARAMS fill in any
+  // params not stored on the pad (newly-added params on migrated pads).
+  if (isToneEffect(pad.effect)) {
+    const defs = getPerformPadParamsDef(pad.effect) || [];
+    for (const def of defs) {
+      const v = (def.key in p) ? p[def.key] : def.default;
+      Audio.setToneEffectParam(trackId, pad.effect, def.key, v);
+    }
+    return;
+  }
   if (pad.effect === "reverb") {
     Audio.setReverbParams(
       trackId,
@@ -8554,9 +8590,11 @@ function openEffectsDefaultsModal() {
     if (editor) openSettingsModal(editor.song);
   };
 
-  // All effects (track keys + vocal's robot — we let the user set
-  // defaults for every effect that exists in the app).
-  const ALL_EFFECTS = [...TRACK_EFFECT_KEYS, ...VOCAL_EXTRA_EFFECTS];
+  // All effects (track keys + vocal's robot + every Tone.js effect — we
+  // let the user set knob + pad defaults for every effect that exists
+  // in the app). The tabs strip uses flex-wrap so the larger Tone list
+  // wraps onto additional rows in the modal.
+  const ALL_EFFECTS = [...TRACK_EFFECT_KEYS, ...VOCAL_EXTRA_EFFECTS, ...TONE_EFFECT_KEYS];
   let pickedEffect = ALL_EFFECTS[0];
 
   // Synthetic "song" used to drive the existing in-song-part param-row
