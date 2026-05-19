@@ -1220,7 +1220,7 @@ const TONE_EFFECTS = {
 
   // ── Modulation (LFO-driven; need .start()) ────────────────────────
   "chorus -tonejs": {
-    create: (T) => { const n = new T.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, feedback: 0.1, wet: 0 }); try { n.start(); } catch {} return n; },
+    create: (T) => { const n = new T.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, feedback: 0.1, spread: 180, type: "sine", wet: 0 }); try { n.start(); } catch {} return n; },
     knobDefault: 0,
     params: [
       { key: "wet",       label: "dry/wet",    min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
@@ -1228,16 +1228,25 @@ const TONE_EFFECTS = {
       { key: "depth",     label: "depth",      type: "fader", min: 0,    max: 1,  defaultValue: 0.7 },
       { key: "delayTime", label: "delay (ms)", type: "fader", min: 1,    max: 20, defaultValue: 3.5 },
       { key: "feedback",  label: "feedback",   type: "fader", min: 0,    max: 0.9,defaultValue: 0.1 },
+      { key: "spread",    label: "spread (°)", type: "fader", min: 0,    max: 180,defaultValue: 180 },
+      { key: "type",      label: "LFO wave",   type: "choice", defaultValue: "sine", choices: [
+        { label: "sine",     value: "sine" },
+        { label: "square",   value: "square" },
+        { label: "triangle", value: "triangle" },
+        { label: "sawtooth", value: "sawtooth" },
+      ]},
     ],
     apply(node, key, v) {
       if (key === "frequency") { try { node.frequency.value = Math.max(0.001, v); } catch {} }
       if (key === "depth")     { try { node.depth = Math.max(0, Math.min(1, v)); } catch {} }
       if (key === "delayTime") { try { node.delayTime = Math.max(0.1, v); } catch {} }
       if (key === "feedback")  { try { node.feedback.value = Math.max(0, Math.min(0.95, v)); } catch {} }
+      if (key === "spread")    { try { node.spread = Math.max(0, Math.min(180, v)); } catch {} }
+      if (key === "type")      { try { node.type = v; } catch {} }
     },
   },
   "phaser -tonejs": {
-    create: (T) => new T.Phaser({ frequency: 0.5, octaves: 3, baseFrequency: 350, Q: 10, wet: 0 }),
+    create: (T) => new T.Phaser({ frequency: 0.5, octaves: 3, stages: 10, baseFrequency: 350, Q: 10, wet: 0 }),
     knobDefault: 0,
     params: [
       { key: "wet",           label: "dry/wet",          min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
@@ -1245,85 +1254,139 @@ const TONE_EFFECTS = {
       { key: "octaves",       label: "octaves",          type: "fader", min: 0,    max: 6,    defaultValue: 3 },
       { key: "baseFrequency", label: "base freq (Hz)",   type: "fader", min: 20,   max: 8000, defaultValue: 350 },
       { key: "Q",             label: "Q",                type: "fader", min: 0,    max: 30,   defaultValue: 10 },
+      // stages is constructor-only on most Tone versions, but we expose it
+      // anyway — apply() falls through silently if the setter is absent.
+      { key: "stages",        label: "stages",           type: "fader", min: 1,    max: 20,   defaultValue: 10 },
     ],
     apply(node, key, v) {
       if (key === "frequency")     { try { node.frequency.value = Math.max(0.001, v); } catch {} }
       if (key === "octaves")       { try { node.octaves = Math.max(0, v); } catch {} }
       if (key === "baseFrequency") { try { node.baseFrequency = Math.max(20, v); } catch {} }
       if (key === "Q")             { try { node.Q.value = Math.max(0, v); } catch {} }
+      if (key === "stages")        { try { node.stages = Math.max(1, Math.min(20, Math.round(v))); } catch {} }
     },
   },
   "tremolo -tonejs": {
-    create: (T) => { const n = new T.Tremolo({ frequency: 5, depth: 0.5, spread: 180, wet: 0 }); try { n.start(); } catch {} return n; },
+    create: (T) => { const n = new T.Tremolo({ frequency: 5, depth: 0.5, spread: 180, type: "sine", wet: 0 }); try { n.start(); } catch {} return n; },
     knobDefault: 0,
     params: [
-      { key: "wet",       label: "dry/wet",   min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
-      { key: "frequency", label: "rate (Hz)", type: "fader", min: 0.05, max: 20,  defaultValue: 5 },
-      { key: "depth",     label: "depth",     type: "fader", min: 0,    max: 1,   defaultValue: 0.5 },
-      { key: "spread",    label: "spread",    type: "fader", min: 0,    max: 180, defaultValue: 180 },
+      { key: "wet",       label: "dry/wet",    min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
+      { key: "frequency", label: "rate (Hz)",  type: "fader", min: 0.05, max: 20,  defaultValue: 5 },
+      { key: "depth",     label: "depth",      type: "fader", min: 0,    max: 1,   defaultValue: 0.5 },
+      { key: "spread",    label: "spread (°)", type: "fader", min: 0,    max: 180, defaultValue: 180 },
+      { key: "type",      label: "LFO wave",   type: "choice", defaultValue: "sine", choices: [
+        { label: "sine",     value: "sine" },
+        { label: "square",   value: "square" },
+        { label: "triangle", value: "triangle" },
+        { label: "sawtooth", value: "sawtooth" },
+      ]},
     ],
     apply(node, key, v) {
       if (key === "frequency") { try { node.frequency.value = Math.max(0.001, v); } catch {} }
       if (key === "depth")     { try { node.depth.value = Math.max(0, Math.min(1, v)); } catch {} }
       if (key === "spread")    { try { node.spread = Math.max(0, Math.min(180, v)); } catch {} }
+      if (key === "type")      { try { node.type = v; } catch {} }
     },
   },
   "vibrato -tonejs": {
-    create: (T) => new T.Vibrato({ frequency: 5, depth: 0.1, wet: 0 }),
+    create: (T) => new T.Vibrato({ frequency: 5, depth: 0.1, type: "sine", wet: 0 }),
     knobDefault: 0,
     params: [
       { key: "wet",       label: "dry/wet",   min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
       { key: "frequency", label: "rate (Hz)", type: "fader", min: 0.05, max: 20, defaultValue: 5 },
       { key: "depth",     label: "depth",     type: "fader", min: 0,    max: 1,  defaultValue: 0.1 },
+      { key: "type",      label: "LFO wave",  type: "choice", defaultValue: "sine", choices: [
+        { label: "sine",     value: "sine" },
+        { label: "square",   value: "square" },
+        { label: "triangle", value: "triangle" },
+        { label: "sawtooth", value: "sawtooth" },
+      ]},
     ],
     apply(node, key, v) {
       if (key === "frequency") { try { node.frequency.value = Math.max(0.001, v); } catch {} }
       if (key === "depth")     { try { node.depth.value = Math.max(0, Math.min(1, v)); } catch {} }
+      if (key === "type")      { try { node.type = v; } catch {} }
     },
   },
   "auto-filter -tonejs": {
-    create: (T) => { const n = new T.AutoFilter({ frequency: 1, depth: 1, baseFrequency: 200, octaves: 2.6, wet: 0 }); try { n.start(); } catch {} return n; },
+    create: (T) => { const n = new T.AutoFilter({ frequency: 1, depth: 1, baseFrequency: 200, octaves: 2.6, type: "sine", filter: { type: "lowpass", rolloff: -12, Q: 1 }, wet: 0 }); try { n.start(); } catch {} return n; },
     knobDefault: 0,
     params: [
-      { key: "wet",           label: "dry/wet",        min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
-      { key: "frequency",     label: "rate (Hz)",      type: "fader", min: 0.05, max: 10,   defaultValue: 1 },
-      { key: "depth",         label: "depth",          type: "fader", min: 0,    max: 1,    defaultValue: 1 },
-      { key: "baseFrequency", label: "base freq (Hz)", type: "fader", min: 20,   max: 8000, defaultValue: 200 },
-      { key: "octaves",       label: "octaves",        type: "fader", min: 0,    max: 8,    defaultValue: 2.6 },
+      { key: "wet",            label: "dry/wet",        min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
+      { key: "frequency",      label: "rate (Hz)",      type: "fader", min: 0.05, max: 10,   defaultValue: 1 },
+      { key: "depth",          label: "depth",          type: "fader", min: 0,    max: 1,    defaultValue: 1 },
+      { key: "baseFrequency",  label: "base freq (Hz)", type: "fader", min: 20,   max: 8000, defaultValue: 200 },
+      { key: "octaves",        label: "octaves",        type: "fader", min: 0,    max: 8,    defaultValue: 2.6 },
+      { key: "type",           label: "LFO wave",       type: "choice", defaultValue: "sine", choices: [
+        { label: "sine",     value: "sine" },
+        { label: "square",   value: "square" },
+        { label: "triangle", value: "triangle" },
+        { label: "sawtooth", value: "sawtooth" },
+      ]},
+      { key: "filterType",     label: "filter type",    type: "choice", defaultValue: "lowpass", choices: [
+        { label: "lowpass",  value: "lowpass" },
+        { label: "highpass", value: "highpass" },
+        { label: "bandpass", value: "bandpass" },
+        { label: "notch",    value: "notch" },
+      ]},
+      { key: "filterRolloff",  label: "filter slope (dB/oct)", type: "choice", defaultValue: -12, choices: [
+        { label: "-12", value: -12 },
+        { label: "-24", value: -24 },
+        { label: "-48", value: -48 },
+        { label: "-96", value: -96 },
+      ]},
+      { key: "filterQ",        label: "filter Q",       type: "fader", min: 0,    max: 20,   defaultValue: 1 },
     ],
     apply(node, key, v) {
       if (key === "frequency")     { try { node.frequency.value = Math.max(0.001, v); } catch {} }
       if (key === "depth")         { try { node.depth.value = Math.max(0, Math.min(1, v)); } catch {} }
       if (key === "baseFrequency") { try { node.baseFrequency = Math.max(20, v); } catch {} }
       if (key === "octaves")       { try { node.octaves = Math.max(0, v); } catch {} }
+      if (key === "type")          { try { node.type = v; } catch {} }
+      if (key === "filterType")    { try { node.filter.type = v; } catch {} }
+      if (key === "filterRolloff") { try { node.filter.rolloff = v; } catch {} }
+      if (key === "filterQ")       { try { node.filter.Q.value = Math.max(0, v); } catch {} }
     },
   },
   "auto-panner -tonejs": {
-    create: (T) => { const n = new T.AutoPanner({ frequency: 1, depth: 1, wet: 0 }); try { n.start(); } catch {} return n; },
+    create: (T) => { const n = new T.AutoPanner({ frequency: 1, depth: 1, type: "sine", wet: 0 }); try { n.start(); } catch {} return n; },
     knobDefault: 0,
     params: [
       { key: "wet",       label: "dry/wet",   min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
       { key: "frequency", label: "rate (Hz)", type: "fader", min: 0.05, max: 20, defaultValue: 1 },
       { key: "depth",     label: "depth",     type: "fader", min: 0,    max: 1,  defaultValue: 1 },
+      { key: "type",      label: "LFO wave",  type: "choice", defaultValue: "sine", choices: [
+        { label: "sine",     value: "sine" },
+        { label: "square",   value: "square" },
+        { label: "triangle", value: "triangle" },
+        { label: "sawtooth", value: "sawtooth" },
+      ]},
     ],
     apply(node, key, v) {
       if (key === "frequency") { try { node.frequency.value = Math.max(0.001, v); } catch {} }
       if (key === "depth")     { try { node.depth.value = Math.max(0, Math.min(1, v)); } catch {} }
+      if (key === "type")      { try { node.type = v; } catch {} }
     },
   },
   "auto-wah -tonejs": {
-    create: (T) => new T.AutoWah({ baseFrequency: 100, octaves: 6, sensitivity: 0, wet: 0 }),
+    create: (T) => new T.AutoWah({ baseFrequency: 100, octaves: 6, sensitivity: 0, Q: 2, gain: 2, follower: 0.3, wet: 0 }),
     knobDefault: 0,
     params: [
       { key: "wet",           label: "dry/wet",         min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
       { key: "baseFrequency", label: "base freq (Hz)",  type: "fader", min: 20, max: 4000, defaultValue: 100 },
       { key: "octaves",       label: "octaves",         type: "fader", min: 0,  max: 8,    defaultValue: 6 },
       { key: "sensitivity",   label: "sensitivity (dB)",type: "fader", min: -40,max: 0,    defaultValue: 0 },
+      { key: "Q",             label: "Q",               type: "fader", min: 0,  max: 20,   defaultValue: 2 },
+      { key: "gain",          label: "gain",            type: "fader", min: 0,  max: 10,   defaultValue: 2 },
+      { key: "follower",      label: "follower (s)",    type: "fader", min: 0.01, max: 1,  defaultValue: 0.3 },
     ],
     apply(node, key, v) {
       if (key === "baseFrequency") { try { node.baseFrequency = Math.max(20, v); } catch {} }
       if (key === "octaves")       { try { node.octaves = Math.max(0, v); } catch {} }
       if (key === "sensitivity")   { try { node.sensitivity = v; } catch {} }
+      if (key === "Q")             { try { node.Q.value = Math.max(0, v); } catch {} }
+      if (key === "gain")          { try { node.gain.value = Math.max(0, v); } catch {} }
+      if (key === "follower")      { try { node.follower = Math.max(0.001, v); } catch {} }
     },
   },
 
@@ -1334,9 +1397,15 @@ const TONE_EFFECTS = {
     params: [
       { key: "wet",        label: "dry/wet",   min: 0, max: 1, defaultLow: 0,   defaultHigh: 1 },
       { key: "distortion", label: "drive",     type: "fader", min: 0, max: 1, defaultValue: 0.4 },
+      { key: "oversample", label: "oversample",type: "choice", defaultValue: "2x", choices: [
+        { label: "none", value: "none" },
+        { label: "2x",   value: "2x" },
+        { label: "4x",   value: "4x" },
+      ]},
     ],
     apply(node, key, v) {
       if (key === "distortion") { try { node.distortion = Math.max(0, Math.min(1, v)); } catch {} }
+      if (key === "oversample") { try { node.oversample = v; } catch {} }
     },
   },
   "bit-crusher -tonejs": {
@@ -1351,14 +1420,20 @@ const TONE_EFFECTS = {
     },
   },
   "chebyshev -tonejs": {
-    create: (T) => new T.Chebyshev({ order: 50, wet: 0 }),
+    create: (T) => new T.Chebyshev({ order: 50, oversample: "none", wet: 0 }),
     knobDefault: 0,
     params: [
-      { key: "wet",   label: "dry/wet", min: 0, max: 1,    defaultLow: 0, defaultHigh: 1 },
-      { key: "order", label: "order",   type: "fader", min: 1, max: 100, defaultValue: 50 },
+      { key: "wet",        label: "dry/wet",    min: 0, max: 1,    defaultLow: 0, defaultHigh: 1 },
+      { key: "order",      label: "order",      type: "fader", min: 1, max: 100, defaultValue: 50 },
+      { key: "oversample", label: "oversample", type: "choice", defaultValue: "none", choices: [
+        { label: "none", value: "none" },
+        { label: "2x",   value: "2x" },
+        { label: "4x",   value: "4x" },
+      ]},
     ],
     apply(node, key, v) {
-      if (key === "order") { try { node.order = Math.max(1, Math.min(100, Math.round(v))); } catch {} }
+      if (key === "order")      { try { node.order = Math.max(1, Math.min(100, Math.round(v))); } catch {} }
+      if (key === "oversample") { try { node.oversample = v; } catch {} }
     },
   },
 
@@ -1370,11 +1445,13 @@ const TONE_EFFECTS = {
       { key: "wet",        label: "dry/wet",        min: 0, max: 1,   defaultLow: 0,  defaultHigh: 1 },
       { key: "pitch",      label: "pitch (semis)",  min: -24, max: 24, defaultLow: 0, defaultHigh: 12 },
       { key: "windowSize", label: "window (s)",     type: "fader", min: 0.01, max: 0.5, defaultValue: 0.1 },
+      { key: "delayTime",  label: "delay (s)",      type: "fader", min: 0,    max: 1,   defaultValue: 0 },
       { key: "feedback",   label: "feedback",       type: "fader", min: 0,    max: 0.95,defaultValue: 0 },
     ],
     apply(node, key, v) {
       if (key === "pitch")      { try { node.pitch = Math.max(-24, Math.min(24, Math.round(v))); } catch {} }
       if (key === "windowSize") { try { node.windowSize = Math.max(0.01, v); } catch {} }
+      if (key === "delayTime")  { try { node.delayTime.value = Math.max(0, v); } catch {} }
       if (key === "feedback")   { try { node.feedback.value = Math.max(0, Math.min(0.95, v)); } catch {} }
     },
   },
