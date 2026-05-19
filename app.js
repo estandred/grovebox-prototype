@@ -762,9 +762,14 @@ const EFFECT_DEFAULTS = {
   filter: 0.5, compressor: 0, volume: 0.5, pump: 0, pitch: 0.5, robot: 0,
 };
 function trackEffectKeys(trackId) {
-  return trackId === "vocals"
+  const native = trackId === "vocals"
     ? [...TRACK_EFFECT_KEYS, ...VOCAL_EXTRA_EFFECTS]
     : TRACK_EFFECT_KEYS;
+  // TONE_EFFECT_KEYS is defined further down (after EFFECT_PARAMS) — guard
+  // against the rare call ordering where it hasn't initialized yet.
+  return Array.isArray(typeof TONE_EFFECT_KEYS !== "undefined" ? TONE_EFFECT_KEYS : null)
+    ? [...native, ...TONE_EFFECT_KEYS]
+    : native;
 }
 
 // ───── User-defined effect defaults (app-wide, not per-song) ─────
@@ -1120,6 +1125,301 @@ const EFFECT_PARAMS = {
     { key: "resonance", label: "resonance", type: "fader", min: 0.5, max: 12, defaultValue: 1 },
   ],
 };
+
+// ───── Tone.js effects ─────
+// A second engine of effects that ride on top of the native Web Audio
+// chain. Each track gets a "tone sub-chain" inserted after the native
+// effects (post-pump, pre-output). Effects in this registry are LAZY —
+// the Tone node is only built the first time a param is applied, then
+// it's kept alive on the chain. That way unused -tonejs effects don't
+// burn CPU.
+//
+// Effect IDs use the convention "<name> -tonejs" (with the space) so
+// every UI surface that prints the id literally still reads correctly
+// as a label without any rename helper.
+//
+// Each entry:
+//   create(Tone, ctx)   — returns a Tone effect node (already started
+//                         where applicable). Must expose .connect /
+//                         .disconnect / .dispose and have a Tone .wet
+//                         AudioParam for dry/wet mixing.
+//   params              — same shape as EFFECT_PARAMS; gets merged in
+//                         at module init so the existing param editor /
+//                         save-load just works.
+//   apply(node, key, v) — pushes a resolved param value to the live
+//                         Tone node. The "wet" key is handled centrally
+//                         (Tone effects all expose a .wet AudioParam).
+//   knobDefault         — initial main-knob value (0..1).
+const TONE_EFFECTS = {
+  // ── Reverbs ────────────────────────────────────────────────────────
+  "reverb -tonejs": {
+    create: (T) => new T.Reverb({ decay: 1.5, preDelay: 0.01, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",      label: "dry/wet",       min: 0,    max: 1,   defaultLow: 0,    defaultHigh: 1 },
+      { key: "decay",    label: "decay (s)",     type: "fader", min: 0.1,  max: 10,  defaultValue: 1.5 },
+      { key: "preDelay", label: "pre-delay (s)", type: "fader", min: 0,    max: 0.5, defaultValue: 0.01 },
+    ],
+    apply(node, key, v) {
+      if (key === "decay")    { try { node.decay = Math.max(0.001, v); } catch {} }
+      if (key === "preDelay") { try { node.preDelay = Math.max(0, v); } catch {} }
+    },
+  },
+  "freeverb -tonejs": {
+    create: (T) => new T.Freeverb({ roomSize: 0.7, dampening: 3000, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",       label: "dry/wet",       min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
+      { key: "roomSize",  label: "room size",     type: "fader", min: 0, max: 0.99, defaultValue: 0.7 },
+      { key: "dampening", label: "dampening (Hz)",type: "fader", min: 200, max: 8000, defaultValue: 3000 },
+    ],
+    apply(node, key, v) {
+      if (key === "roomSize")  { try { node.roomSize.value = Math.max(0, Math.min(0.99, v)); } catch {} }
+      if (key === "dampening") { try { node.dampening = Math.max(20, v); } catch {} }
+    },
+  },
+  "jcreverb -tonejs": {
+    create: (T) => new T.JCReverb({ roomSize: 0.6, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",      label: "dry/wet",   min: 0, max: 1,   defaultLow: 0,   defaultHigh: 1 },
+      { key: "roomSize", label: "room size", type: "fader", min: 0, max: 0.99, defaultValue: 0.6 },
+    ],
+    apply(node, key, v) {
+      if (key === "roomSize") { try { node.roomSize.value = Math.max(0, Math.min(0.99, v)); } catch {} }
+    },
+  },
+
+  // ── Delays ─────────────────────────────────────────────────────────
+  "feedback-delay -tonejs": {
+    create: (T) => new T.FeedbackDelay({ delayTime: 0.25, feedback: 0.4, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",       label: "dry/wet",   min: 0, max: 1,    defaultLow: 0,    defaultHigh: 1 },
+      { key: "delayTime", label: "time (s)",  type: "fader", min: 0.01, max: 1,    defaultValue: 0.25 },
+      { key: "feedback",  label: "feedback",  type: "fader", min: 0,    max: 0.95, defaultValue: 0.4 },
+    ],
+    apply(node, key, v) {
+      if (key === "delayTime") { try { node.delayTime.value = Math.max(0.001, v); } catch {} }
+      if (key === "feedback")  { try { node.feedback.value  = Math.max(0, Math.min(0.99, v)); } catch {} }
+    },
+  },
+  "ping-pong -tonejs": {
+    create: (T) => new T.PingPongDelay({ delayTime: 0.25, feedback: 0.4, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",       label: "dry/wet",  min: 0, max: 1,    defaultLow: 0,    defaultHigh: 1 },
+      { key: "delayTime", label: "time (s)", type: "fader", min: 0.01, max: 1,    defaultValue: 0.25 },
+      { key: "feedback",  label: "feedback", type: "fader", min: 0,    max: 0.95, defaultValue: 0.4 },
+    ],
+    apply(node, key, v) {
+      if (key === "delayTime") { try { node.delayTime.value = Math.max(0.001, v); } catch {} }
+      if (key === "feedback")  { try { node.feedback.value  = Math.max(0, Math.min(0.99, v)); } catch {} }
+    },
+  },
+
+  // ── Modulation (LFO-driven; need .start()) ────────────────────────
+  "chorus -tonejs": {
+    create: (T) => { const n = new T.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, feedback: 0.1, wet: 0 }); try { n.start(); } catch {} return n; },
+    knobDefault: 0,
+    params: [
+      { key: "wet",       label: "dry/wet",    min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
+      { key: "frequency", label: "rate (Hz)",  type: "fader", min: 0.05, max: 10, defaultValue: 1.5 },
+      { key: "depth",     label: "depth",      type: "fader", min: 0,    max: 1,  defaultValue: 0.7 },
+      { key: "delayTime", label: "delay (ms)", type: "fader", min: 1,    max: 20, defaultValue: 3.5 },
+      { key: "feedback",  label: "feedback",   type: "fader", min: 0,    max: 0.9,defaultValue: 0.1 },
+    ],
+    apply(node, key, v) {
+      if (key === "frequency") { try { node.frequency.value = Math.max(0.001, v); } catch {} }
+      if (key === "depth")     { try { node.depth = Math.max(0, Math.min(1, v)); } catch {} }
+      if (key === "delayTime") { try { node.delayTime = Math.max(0.1, v); } catch {} }
+      if (key === "feedback")  { try { node.feedback.value = Math.max(0, Math.min(0.95, v)); } catch {} }
+    },
+  },
+  "phaser -tonejs": {
+    create: (T) => new T.Phaser({ frequency: 0.5, octaves: 3, baseFrequency: 350, Q: 10, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",           label: "dry/wet",          min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
+      { key: "frequency",     label: "rate (Hz)",        type: "fader", min: 0.05, max: 10,   defaultValue: 0.5 },
+      { key: "octaves",       label: "octaves",          type: "fader", min: 0,    max: 6,    defaultValue: 3 },
+      { key: "baseFrequency", label: "base freq (Hz)",   type: "fader", min: 20,   max: 8000, defaultValue: 350 },
+      { key: "Q",             label: "Q",                type: "fader", min: 0,    max: 30,   defaultValue: 10 },
+    ],
+    apply(node, key, v) {
+      if (key === "frequency")     { try { node.frequency.value = Math.max(0.001, v); } catch {} }
+      if (key === "octaves")       { try { node.octaves = Math.max(0, v); } catch {} }
+      if (key === "baseFrequency") { try { node.baseFrequency = Math.max(20, v); } catch {} }
+      if (key === "Q")             { try { node.Q.value = Math.max(0, v); } catch {} }
+    },
+  },
+  "tremolo -tonejs": {
+    create: (T) => { const n = new T.Tremolo({ frequency: 5, depth: 0.5, spread: 180, wet: 0 }); try { n.start(); } catch {} return n; },
+    knobDefault: 0,
+    params: [
+      { key: "wet",       label: "dry/wet",   min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
+      { key: "frequency", label: "rate (Hz)", type: "fader", min: 0.05, max: 20,  defaultValue: 5 },
+      { key: "depth",     label: "depth",     type: "fader", min: 0,    max: 1,   defaultValue: 0.5 },
+      { key: "spread",    label: "spread",    type: "fader", min: 0,    max: 180, defaultValue: 180 },
+    ],
+    apply(node, key, v) {
+      if (key === "frequency") { try { node.frequency.value = Math.max(0.001, v); } catch {} }
+      if (key === "depth")     { try { node.depth.value = Math.max(0, Math.min(1, v)); } catch {} }
+      if (key === "spread")    { try { node.spread = Math.max(0, Math.min(180, v)); } catch {} }
+    },
+  },
+  "vibrato -tonejs": {
+    create: (T) => new T.Vibrato({ frequency: 5, depth: 0.1, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",       label: "dry/wet",   min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
+      { key: "frequency", label: "rate (Hz)", type: "fader", min: 0.05, max: 20, defaultValue: 5 },
+      { key: "depth",     label: "depth",     type: "fader", min: 0,    max: 1,  defaultValue: 0.1 },
+    ],
+    apply(node, key, v) {
+      if (key === "frequency") { try { node.frequency.value = Math.max(0.001, v); } catch {} }
+      if (key === "depth")     { try { node.depth.value = Math.max(0, Math.min(1, v)); } catch {} }
+    },
+  },
+  "auto-filter -tonejs": {
+    create: (T) => { const n = new T.AutoFilter({ frequency: 1, depth: 1, baseFrequency: 200, octaves: 2.6, wet: 0 }); try { n.start(); } catch {} return n; },
+    knobDefault: 0,
+    params: [
+      { key: "wet",           label: "dry/wet",        min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
+      { key: "frequency",     label: "rate (Hz)",      type: "fader", min: 0.05, max: 10,   defaultValue: 1 },
+      { key: "depth",         label: "depth",          type: "fader", min: 0,    max: 1,    defaultValue: 1 },
+      { key: "baseFrequency", label: "base freq (Hz)", type: "fader", min: 20,   max: 8000, defaultValue: 200 },
+      { key: "octaves",       label: "octaves",        type: "fader", min: 0,    max: 8,    defaultValue: 2.6 },
+    ],
+    apply(node, key, v) {
+      if (key === "frequency")     { try { node.frequency.value = Math.max(0.001, v); } catch {} }
+      if (key === "depth")         { try { node.depth.value = Math.max(0, Math.min(1, v)); } catch {} }
+      if (key === "baseFrequency") { try { node.baseFrequency = Math.max(20, v); } catch {} }
+      if (key === "octaves")       { try { node.octaves = Math.max(0, v); } catch {} }
+    },
+  },
+  "auto-panner -tonejs": {
+    create: (T) => { const n = new T.AutoPanner({ frequency: 1, depth: 1, wet: 0 }); try { n.start(); } catch {} return n; },
+    knobDefault: 0,
+    params: [
+      { key: "wet",       label: "dry/wet",   min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
+      { key: "frequency", label: "rate (Hz)", type: "fader", min: 0.05, max: 20, defaultValue: 1 },
+      { key: "depth",     label: "depth",     type: "fader", min: 0,    max: 1,  defaultValue: 1 },
+    ],
+    apply(node, key, v) {
+      if (key === "frequency") { try { node.frequency.value = Math.max(0.001, v); } catch {} }
+      if (key === "depth")     { try { node.depth.value = Math.max(0, Math.min(1, v)); } catch {} }
+    },
+  },
+  "auto-wah -tonejs": {
+    create: (T) => new T.AutoWah({ baseFrequency: 100, octaves: 6, sensitivity: 0, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",           label: "dry/wet",         min: 0, max: 1,    defaultLow: 0,   defaultHigh: 1 },
+      { key: "baseFrequency", label: "base freq (Hz)",  type: "fader", min: 20, max: 4000, defaultValue: 100 },
+      { key: "octaves",       label: "octaves",         type: "fader", min: 0,  max: 8,    defaultValue: 6 },
+      { key: "sensitivity",   label: "sensitivity (dB)",type: "fader", min: -40,max: 0,    defaultValue: 0 },
+    ],
+    apply(node, key, v) {
+      if (key === "baseFrequency") { try { node.baseFrequency = Math.max(20, v); } catch {} }
+      if (key === "octaves")       { try { node.octaves = Math.max(0, v); } catch {} }
+      if (key === "sensitivity")   { try { node.sensitivity = v; } catch {} }
+    },
+  },
+
+  // ── Distortion / bit / harmonic ───────────────────────────────────
+  "distortion -tonejs": {
+    create: (T) => new T.Distortion({ distortion: 0.4, oversample: "2x", wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",        label: "dry/wet",   min: 0, max: 1, defaultLow: 0,   defaultHigh: 1 },
+      { key: "distortion", label: "drive",     type: "fader", min: 0, max: 1, defaultValue: 0.4 },
+    ],
+    apply(node, key, v) {
+      if (key === "distortion") { try { node.distortion = Math.max(0, Math.min(1, v)); } catch {} }
+    },
+  },
+  "bit-crusher -tonejs": {
+    create: (T) => new T.BitCrusher({ bits: 4, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",  label: "dry/wet", min: 0, max: 1,  defaultLow: 0,  defaultHigh: 1 },
+      { key: "bits", label: "bits",    type: "fader", min: 1, max: 16, defaultValue: 4 },
+    ],
+    apply(node, key, v) {
+      if (key === "bits") { try { node.bits.value = Math.max(1, Math.min(16, Math.round(v))); } catch {} }
+    },
+  },
+  "chebyshev -tonejs": {
+    create: (T) => new T.Chebyshev({ order: 50, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",   label: "dry/wet", min: 0, max: 1,    defaultLow: 0, defaultHigh: 1 },
+      { key: "order", label: "order",   type: "fader", min: 1, max: 100, defaultValue: 50 },
+    ],
+    apply(node, key, v) {
+      if (key === "order") { try { node.order = Math.max(1, Math.min(100, Math.round(v))); } catch {} }
+    },
+  },
+
+  // ── Pitch / frequency ─────────────────────────────────────────────
+  "pitch-shift -tonejs": {
+    create: (T) => new T.PitchShift({ pitch: 0, windowSize: 0.1, delayTime: 0, feedback: 0, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",        label: "dry/wet",        min: 0, max: 1,   defaultLow: 0,  defaultHigh: 1 },
+      { key: "pitch",      label: "pitch (semis)",  min: -24, max: 24, defaultLow: 0, defaultHigh: 12 },
+      { key: "windowSize", label: "window (s)",     type: "fader", min: 0.01, max: 0.5, defaultValue: 0.1 },
+      { key: "feedback",   label: "feedback",       type: "fader", min: 0,    max: 0.95,defaultValue: 0 },
+    ],
+    apply(node, key, v) {
+      if (key === "pitch")      { try { node.pitch = Math.max(-24, Math.min(24, Math.round(v))); } catch {} }
+      if (key === "windowSize") { try { node.windowSize = Math.max(0.01, v); } catch {} }
+      if (key === "feedback")   { try { node.feedback.value = Math.max(0, Math.min(0.95, v)); } catch {} }
+    },
+  },
+  "freq-shift -tonejs": {
+    create: (T) => new T.FrequencyShifter({ frequency: 0, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",       label: "dry/wet",       min: 0, max: 1, defaultLow: 0, defaultHigh: 1 },
+      { key: "frequency", label: "shift (Hz)",    min: -1000, max: 1000, defaultLow: 0, defaultHigh: 200 },
+    ],
+    apply(node, key, v) {
+      if (key === "frequency") { try { node.frequency.value = v; } catch {} }
+    },
+  },
+
+  // ── Stereo ────────────────────────────────────────────────────────
+  "widener -tonejs": {
+    create: (T) => new T.StereoWidener({ width: 0.5, wet: 0 }),
+    knobDefault: 0,
+    params: [
+      { key: "wet",   label: "dry/wet", min: 0, max: 1, defaultLow: 0, defaultHigh: 1 },
+      { key: "width", label: "width",   type: "fader", min: 0, max: 1, defaultValue: 0.5 },
+    ],
+    apply(node, key, v) {
+      if (key === "width") { try { node.width.value = Math.max(0, Math.min(1, v)); } catch {} }
+    },
+  },
+};
+
+// Merge Tone.js effect schemas into the EFFECT_PARAMS / EFFECT_DEFAULTS
+// tables so every existing system (param editor, automation bars, save /
+// load JSON, defaults modal, all-params popup) treats them identically
+// to native effects. The Audio module's switch dispatchers detect them
+// by presence in TONE_EFFECTS and route to the tone-specific apply path.
+for (const [name, def] of Object.entries(TONE_EFFECTS)) {
+  EFFECT_PARAMS[name] = def.params;
+  EFFECT_DEFAULTS[name] = def.knobDefault;
+}
+
+// Names of all Tone.js effect IDs (with their " -tonejs" suffix), in the
+// order they appear above. trackEffectKeys appends these so the "add
+// effect" picker shows them; existing songs without these in their
+// enabledEffects[] simply don't display them.
+const TONE_EFFECT_KEYS = Object.keys(TONE_EFFECTS);
+function isToneEffect(name) { return TONE_EFFECTS[name] != null; }
 
 function getEffectParamsDef(name) {
   return EFFECT_PARAMS[name] || null;
@@ -1808,8 +2108,23 @@ const Audio = (() => {
       const Ctor = window.AudioContext || window.webkitAudioContext;
       try { ctx = new Ctor({ latencyHint: "interactive" }); }
       catch { ctx = new Ctor(); }
+      // Hand the same context to Tone.js so its effect nodes live in our
+      // audio graph (not Tone's own isolated context). Without this every
+      // Tone effect would output to a different destination and we'd hear
+      // nothing. Wrapped in try/catch so the app keeps running if Tone.js
+      // failed to load from the CDN.
+      try {
+        if (typeof window !== "undefined" && window.Tone) {
+          window.Tone.setContext(ctx);
+        }
+      } catch (err) {
+        console.warn("[tone] setContext failed", err);
+      }
     }
     if (ctx.state === "suspended") ctx.resume();
+    // Tone needs an explicit start() after a user-gesture-driven resume
+    // to ungate scheduling. Safe to call repeatedly.
+    try { if (window.Tone && window.Tone.start) window.Tone.start(); } catch {}
     return ctx;
   }
   function nowCtx() { return ensure(); }
@@ -2517,8 +2832,19 @@ const Audio = (() => {
     pumpDry.connect(afterPump);
     pumpWet.connect(afterPump);
 
+    // Tone.js sub-chain. Sits between the native chain output (afterPump)
+    // and the final output gain. Initially toneIn → toneOut is a direct
+    // passthrough. As -tonejs effects get used they're spliced into this
+    // sub-chain in series via ensureToneEffectInChain(). The chain stays
+    // empty (and the connection direct) until the user actually engages a
+    // Tone effect, so unused -tonejs effects cost zero CPU.
+    const toneIn  = c.createGain();
+    const toneOut = c.createGain();
+    afterPump.connect(toneIn);
+    toneIn.connect(toneOut);
+
     const output = c.createGain();
-    afterPump.connect(output);
+    toneOut.connect(output);
     // Mute gain: a final stage we can ramp to 0 to silence the whole track
     // without disturbing any of the per-effect dry/wet settings. Default 1
     // so unmuted tracks pass through untouched.
@@ -2547,9 +2873,71 @@ const Audio = (() => {
       pumpDry, pumpWet,
       pitchShifter,
       _pumpRateBeats: 1, // cached so updateBpm can re-derive LFO Hz
+      // Tone.js sub-chain bookkeeping. Effects are inserted lazily.
+      toneIn, toneOut,
+      toneNodes: new Map(),  // effectName -> Tone node
+      toneOrder: [],         // names in current chain order
     };
     trackChains.set(trackId, chain);
     return chain;
+  }
+
+  // Splice a Tone.js effect into the track's tone sub-chain. The lazy
+  // approach keeps unused -tonejs effects at zero CPU cost. The first
+  // time a given effect name is requested we:
+  //   1. Build the Tone node (via the TONE_EFFECTS registry).
+  //   2. Break the current trailing-edge connection (lastNode → toneOut).
+  //   3. Insert: lastNode → newNode → toneOut.
+  //   4. Remember the node + its position so we don't double-insert.
+  // Returns null if Tone.js isn't loaded (CDN failed) or the registry
+  // doesn't recognize the name. Callers should bail silently in that case.
+  function ensureToneEffectInChain(trackId, name) {
+    if (typeof window === "undefined" || !window.Tone) return null;
+    if (!isToneEffect(name)) return null;
+    const chain = ensureTrackChain(trackId);
+    if (!chain) return null;
+    if (chain.toneNodes.has(name)) return chain.toneNodes.get(name);
+    const def = TONE_EFFECTS[name];
+    let node;
+    try { node = def.create(window.Tone, ctx); }
+    catch (err) { console.warn("[tone] create failed:", name, err); return null; }
+    if (!node) return null;
+    // Find the node currently feeding toneOut (the "tail" of the sub-chain).
+    const tail = chain.toneOrder.length === 0
+      ? chain.toneIn
+      : chain.toneNodes.get(chain.toneOrder[chain.toneOrder.length - 1]);
+    try { tail.disconnect(chain.toneOut); } catch {}
+    try { tail.connect(node); } catch (err) { console.warn("[tone] connect tail failed:", name, err); }
+    try { node.connect(chain.toneOut); } catch (err) { console.warn("[tone] connect out failed:", name, err); }
+    chain.toneNodes.set(name, node);
+    chain.toneOrder.push(name);
+    return node;
+  }
+
+  // Push one resolved param value to a tone effect's live node. Called per
+  // param (the dispatcher in applyEffectToAudio iterates the schema and
+  // calls in here for each). "wet" is handled centrally since every Tone
+  // effect exposes a .wet AudioParam with identical semantics.
+  function setToneEffectParam(trackId, name, paramKey, value) {
+    if (!isToneEffect(name)) return;
+    const node = ensureToneEffectInChain(trackId, name);
+    if (!node) return;
+    const t = (ctx && ctx.currentTime) || 0;
+    const RAMP = 0.006;
+    if (paramKey === "wet") {
+      const v = Math.max(0, Math.min(1, value));
+      try {
+        node.wet.cancelScheduledValues(t);
+        node.wet.setValueAtTime(node.wet.value, t);
+        node.wet.linearRampToValueAtTime(v, t + RAMP);
+      } catch {
+        try { node.wet.value = v; } catch {}
+      }
+      return;
+    }
+    const def = TONE_EFFECTS[name];
+    try { def.apply(node, paramKey, value); }
+    catch (err) { console.warn("[tone] apply failed:", name, paramKey, err); }
   }
 
   function setEffectParam(trackId, name, value) {
@@ -2749,6 +3137,10 @@ const Audio = (() => {
     nowCtx, hasCtx, outputLatency, warmUp,
     setEffectParam, setReverbParams, setPumpParams, updateBpm, ensureTrackChain, trackInputNode,
     setTrackMuted,
+    // Tone.js bridge: callers in applyEffectToAudio route each resolved
+    // param value through this. Builds the underlying Tone node on first
+    // use and keeps it on the chain afterward.
+    setToneEffectParam,
     // Exposed so applyChainParams (which lives outside this IIFE) can
     // rebuild the wave-shaper curves for drive / distortion without
     // duplicating the math.
@@ -4167,6 +4559,24 @@ function applySongEffectsToAudio(song) {
 //   - effects with no params at all → bare setEffectParam fallback
 function applyEffectToAudio(song, trackId, name) {
   const knob = getEffect(song, trackId, name);
+  // Tone.js effects: resolve each param (automation-interpolated or
+  // fader/choice single value) and push through the Tone bridge. Treated
+  // exactly like a multi-param native effect — the dispatch just lands in
+  // setToneEffectParam instead of the native switch.
+  if (isToneEffect(name)) {
+    const defs = getEffectParamsDef(name) || [];
+    for (const def of defs) {
+      let v;
+      if (def.type === "choice" || def.type === "fader") {
+        const range = getParamRange(song, trackId, name, def.key);
+        v = range.value;
+      } else {
+        v = paramValueAt(song, trackId, name, def.key, knob);
+      }
+      Audio.setToneEffectParam(trackId, name, def.key, v);
+    }
+    return;
+  }
   if (name === "reverb") {
     const wet      = paramValueAt(song, trackId, "reverb", "wet",      knob);
     const size     = paramValueAt(song, trackId, "reverb", "size",     knob);

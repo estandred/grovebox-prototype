@@ -1,5 +1,4 @@
 <!doctype html>
-<!-- deploy-test: 2026-05-19 -->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -10,6 +9,11 @@
 <body>
   <div id="app"></div>
   <a class="edit-badge" href="#" aria-hidden="true">[ beat studio ]</a>
+  <!-- Tone.js — loaded BEFORE app.js so window.Tone is available when the
+       audio engine initializes. UMD build attaches to window.Tone. If the
+       CDN fails the app continues to run; only the "-tonejs" effects go
+       silent (the native effects keep working). -->
+  <script src="https://cdn.jsdelivr.net/npm/tone@14.9.17/build/Tone.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
