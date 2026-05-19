@@ -2894,19 +2894,8 @@ const Audio = (() => {
     pumpDry.connect(afterPump);
     pumpWet.connect(afterPump);
 
-    // Tone.js sub-chain. Sits between the native chain output (afterPump)
-    // and the final output gain. Initially toneIn → toneOut is a direct
-    // passthrough. As -tonejs effects get used they're spliced into this
-    // sub-chain in series via ensureToneEffectInChain(). The chain stays
-    // empty (and the connection direct) until the user actually engages a
-    // Tone effect, so unused -tonejs effects cost zero CPU.
-    const toneIn  = c.createGain();
-    const toneOut = c.createGain();
-    afterPump.connect(toneIn);
-    toneIn.connect(toneOut);
-
     const output = c.createGain();
-    toneOut.connect(output);
+    afterPump.connect(output);
     // Mute gain: a final stage we can ramp to 0 to silence the whole track
     // without disturbing any of the per-effect dry/wet settings. Default 1
     // so unmuted tracks pass through untouched.
@@ -2933,15 +2922,53 @@ const Audio = (() => {
       volume,
       pumpLFO, pumpShape, pumpCompDepth, pumpVolDepth, pumpComp, pumpVol,
       pumpDry, pumpWet,
+      // afterPump is preserved so the lazy tone sub-chain can splice in
+      // when a -tonejs effect first gets engaged. Until then the native
+      // chain runs untouched: afterPump → output → muteGain → destination.
+      _afterPump: afterPump,
       pitchShifter,
       _pumpRateBeats: 1, // cached so updateBpm can re-derive LFO Hz
-      // Tone.js sub-chain bookkeeping. Effects are inserted lazily.
-      toneIn, toneOut,
-      toneNodes: new Map(),  // effectName -> Tone node
-      toneOrder: [],         // names in current chain order
+      // Tone.js sub-chain — built lazily on first Tone-effect use.
+      // ensureToneSubChain() creates toneIn/toneOut and rewires:
+      //   afterPump → toneIn → toneOut → output (replacing the direct
+      //   afterPump → output connection).
+      toneIn: null,
+      toneOut: null,
+      toneNodes: new Map(),
+      toneOrder: [],
     };
     trackChains.set(trackId, chain);
     return chain;
+  }
+
+  // Splice the lazy tone sub-chain into a track on demand. Pre-condition:
+  // native chain currently has afterPump → output. We disconnect that,
+  // create toneIn/toneOut gain nodes, and rewire to:
+  //   afterPump → toneIn → toneOut → output
+  // Subsequent ensureToneEffectInChain() calls then insert Tone nodes
+  // between toneIn and toneOut. If anything throws, we restore the
+  // original direct connection so audio keeps flowing.
+  function ensureToneSubChain(chain) {
+    if (chain.toneIn && chain.toneOut) return true;
+    try {
+      const toneIn  = ctx.createGain();
+      const toneOut = ctx.createGain();
+      // Break the direct connection first…
+      try { chain._afterPump.disconnect(chain.output); } catch {}
+      // …then wire afterPump → toneIn → toneOut → output.
+      chain._afterPump.connect(toneIn);
+      toneIn.connect(toneOut);
+      toneOut.connect(chain.output);
+      chain.toneIn  = toneIn;
+      chain.toneOut = toneOut;
+      return true;
+    } catch (err) {
+      console.warn("[tone] sub-chain wiring failed; restoring direct path", err);
+      try { chain._afterPump.connect(chain.output); } catch {}
+      chain.toneIn = null;
+      chain.toneOut = null;
+      return false;
+    }
   }
 
   // One-time bridge between Tone.js and our AudioContext. Called lazily
@@ -2981,6 +3008,8 @@ const Audio = (() => {
     const chain = ensureTrackChain(trackId);
     if (!chain) return null;
     if (chain.toneNodes.has(name)) return chain.toneNodes.get(name);
+    // First Tone effect on this track: splice the tone sub-chain in.
+    if (!ensureToneSubChain(chain)) return null;
     const def = TONE_EFFECTS[name];
     let node;
     try { node = def.create(window.Tone, ctx); }
