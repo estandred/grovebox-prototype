@@ -4672,11 +4672,16 @@ function applySongEffectsToAudio(song) {
 //   - effects with no params at all → bare setEffectParam fallback
 function applyEffectToAudio(song, trackId, name) {
   const knob = getEffect(song, trackId, name);
-  // Tone.js effects: resolve each param (automation-interpolated or
-  // fader/choice single value) and push through the Tone bridge. Treated
-  // exactly like a multi-param native effect — the dispatch just lands in
-  // setToneEffectParam instead of the native switch.
+  // Tone.js effects: only touch the Tone bridge if the user has actually
+  // added this effect to the track. Without this gate, every song load
+  // would iterate ALL trackEffectKeys (which now includes 18 tone
+  // effects) and try to apply them — that would force-create a Tone node
+  // and bind Tone to our AudioContext for every song, even ones that
+  // never use Tone effects. Binding Tone to a live context can disrupt
+  // existing audio, so we skip entirely when the effect isn't enabled.
   if (isToneEffect(name)) {
+    const enabled = (song.enabledEffects && song.enabledEffects[trackId]) || [];
+    if (!enabled.includes(name)) return;
     const defs = getEffectParamsDef(name) || [];
     for (const def of defs) {
       let v;
