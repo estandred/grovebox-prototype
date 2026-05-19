@@ -3144,12 +3144,24 @@ const Audio = (() => {
           param.cancelScheduledValues(t);
           param.setValueAtTime(param.value, t);
           param.linearRampToValueAtTime(target, t + RAMP);
+          // Hard-anchor the post-ramp value so nothing drifts back later.
+          // Some Tone-side activity can otherwise schedule competing
+          // automation on the same param. Belt-and-suspenders.
+          param.setValueAtTime(target, t + RAMP + 0.001);
         } catch {
           try { param.value = target; } catch {}
         }
       };
       snap(wrapper.dry.gain, 1 - v);
       snap(wrapper.wet.gain, v);
+      // Also pin the Tone node's INTERNAL wet to 1 every time we touch
+      // dry/wet. If anything elsewhere (Tone's own scheduler, a stale
+      // automation, etc.) tries to move that internal wet away from 1,
+      // we re-pin it. The audible mix is still controlled externally.
+      try {
+        if (node.wet && node.wet.cancelScheduledValues) node.wet.cancelScheduledValues(t);
+        if (node.wet && "value" in node.wet) node.wet.value = 1;
+      } catch {}
       return;
     }
     const def = TONE_EFFECTS[name];
