@@ -3040,12 +3040,28 @@ const Audio = (() => {
     catch (err) { console.warn("[tone] create failed:", name, err); return null; }
     if (!node) return null;
     // Find the node currently feeding toneOut (the "tail" of the sub-chain).
+    // Could be either a native GainNode (chain.toneIn on the very first
+    // insert) or another Tone effect (subsequent inserts).
     const tail = chain.toneOrder.length === 0
       ? chain.toneIn
       : chain.toneNodes.get(chain.toneOrder[chain.toneOrder.length - 1]);
-    try { tail.disconnect(chain.toneOut); } catch {}
-    try { tail.connect(node); } catch (err) { console.warn("[tone] connect tail failed:", name, err); }
-    try { node.connect(chain.toneOut); } catch (err) { console.warn("[tone] connect out failed:", name, err); }
+    // CRITICAL: native GainNode.connect() requires a real AudioNode as
+    // its destination. Tone effects are class wrappers exposing .input /
+    // .output as native AudioNodes — passing the wrapper itself to a
+    // native connect silently drops audio (no error, just no signal).
+    // Always pass node.input when going INTO a Tone effect. Tone's own
+    // .connect() handles the .input/.output dereference internally, so
+    // routing OUT of a Tone effect to a native node just uses
+    // node.connect(nativeDest) as written.
+    const newNodeIn  = node.input  || node;   // dest when entering this Tone effect
+    const tailOut    = (tail && tail.output) ? tail.output : tail;
+    try { tailOut.disconnect(chain.toneOut); } catch {}
+    try { tailOut.connect(newNodeIn); }
+    catch (err) { console.warn("[tone] connect tail→node failed:", name, err); }
+    try {
+      const outNode = node.output || node;
+      outNode.connect(chain.toneOut);
+    } catch (err) { console.warn("[tone] connect node→toneOut failed:", name, err); }
     chain.toneNodes.set(name, node);
     chain.toneOrder.push(name);
     return node;
