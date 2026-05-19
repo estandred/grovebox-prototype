@@ -3045,26 +3045,50 @@ const Audio = (() => {
     const tail = chain.toneOrder.length === 0
       ? chain.toneIn
       : chain.toneNodes.get(chain.toneOrder[chain.toneOrder.length - 1]);
-    // CRITICAL: native GainNode.connect() requires a real AudioNode as
-    // its destination. Tone effects are class wrappers exposing .input /
-    // .output as native AudioNodes — passing the wrapper itself to a
-    // native connect silently drops audio (no error, just no signal).
-    // Always pass node.input when going INTO a Tone effect. Tone's own
-    // .connect() handles the .input/.output dereference internally, so
-    // routing OUT of a Tone effect to a native node just uses
-    // node.connect(nativeDest) as written.
-    const newNodeIn  = node.input  || node;   // dest when entering this Tone effect
-    const tailOut    = (tail && tail.output) ? tail.output : tail;
-    try { tailOut.disconnect(chain.toneOut); } catch {}
-    try { tailOut.connect(newNodeIn); }
+    // Tone v14.9 does NOT patch AudioNode.prototype.connect, so calling
+    // a native .connect() with a Tone wrapper as the destination silently
+    // drops audio (no error — just no signal). On top of that,
+    // tone.input / tone.output are typically Tone.Gain wrappers, not raw
+    // AudioNodes, so a single dereference isn't enough. We drill all the
+    // way down to the underlying native AudioNode before connecting.
+    const tailOutNative = nativeOutputOf(tail);
+    const nodeInNative  = nativeInputOf(node);
+    const nodeOutNative = nativeOutputOf(node);
+    const toneOutNative = nativeInputOf(chain.toneOut);
+    try { tailOutNative.disconnect(toneOutNative); } catch {}
+    try { tailOutNative.connect(nodeInNative); }
     catch (err) { console.warn("[tone] connect tail→node failed:", name, err); }
-    try {
-      const outNode = node.output || node;
-      outNode.connect(chain.toneOut);
-    } catch (err) { console.warn("[tone] connect node→toneOut failed:", name, err); }
+    try { nodeOutNative.connect(toneOutNative); }
+    catch (err) { console.warn("[tone] connect node→toneOut failed:", name, err); }
     chain.toneNodes.set(name, node);
     chain.toneOrder.push(name);
     return node;
+  }
+
+  // Drill through Tone wrappers (Tone.Effect.input → Tone.Gain → native
+  // GainNode) to reach the underlying native AudioNode. A native node
+  // has no .input property, so the loop exits immediately for it. For a
+  // Tone effect: effect.input is a Tone.Gain, whose .input is the
+  // wrapped native GainNode. We loop until x has no further .input.
+  function nativeInputOf(x) {
+    if (!x) return x;
+    let cur = x;
+    let guard = 8;
+    while (cur && (typeof AudioNode === "undefined" || !(cur instanceof AudioNode))
+                && cur.input !== undefined && cur.input !== cur && guard-- > 0) {
+      cur = cur.input;
+    }
+    return cur;
+  }
+  function nativeOutputOf(x) {
+    if (!x) return x;
+    let cur = x;
+    let guard = 8;
+    while (cur && (typeof AudioNode === "undefined" || !(cur instanceof AudioNode))
+                && cur.output !== undefined && cur.output !== cur && guard-- > 0) {
+      cur = cur.output;
+    }
+    return cur;
   }
 
   // Push one resolved param value to a tone effect's live node. Called per
