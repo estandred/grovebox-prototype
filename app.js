@@ -3370,6 +3370,14 @@ const Audio = (() => {
     // param value through this. Builds the underlying Tone node on first
     // use and keeps it on the chain afterward.
     setToneEffectParam,
+    // True if a -tonejs effect's wrapper is already live on a track. Used
+    // by applyEffectToAudio to decide whether to re-apply baseline values
+    // on a pad-release path (so the wrapper's wet snaps back to 0) even
+    // when the effect isn't in the track's enabledEffects list.
+    hasToneEffectOnTrack: (trackId, name) => {
+      const c = trackChains.get(trackId);
+      return !!(c && c.toneNodes && c.toneNodes.has(name));
+    },
     // Exposed so applyChainParams (which lives outside this IIFE) can
     // rebuild the wave-shaper curves for drive / distortion without
     // duplicating the math.
@@ -4796,8 +4804,16 @@ function applyEffectToAudio(song, trackId, name) {
   // never use Tone effects. Binding Tone to a live context can disrupt
   // existing audio, so we skip entirely when the effect isn't enabled.
   if (isToneEffect(name)) {
+    // Skip ONLY if the effect was never engaged on this track. Once a
+    // perform pad (or a knob) creates the Tone node, every subsequent
+    // applyEffectToAudio call must still flow through here — that's how
+    // the pad-release path resets the wrapper's wet gain back to 0. The
+    // old "not in enabledEffects → return" gate was leaving the wet
+    // gain at whatever the pad set it to, so the effect kept playing
+    // after the pad was released.
     const enabled = (song.enabledEffects && song.enabledEffects[trackId]) || [];
-    if (!enabled.includes(name)) return;
+    const alreadyOnChain = Audio.hasToneEffectOnTrack(trackId, name);
+    if (!enabled.includes(name) && !alreadyOnChain) return;
     const defs = getEffectParamsDef(name) || [];
     for (const def of defs) {
       let v;
