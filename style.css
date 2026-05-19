@@ -1567,6 +1567,15 @@ a { color: inherit; text-decoration: none; }
 }
 .deck-canvas-wrap canvas {
   display: block;
+  /* Absolute fill so the waveform spans the full row height regardless
+     of the canvas's intrinsic 150×300 default. Percentage heights on a
+     canvas otherwise collapse to intrinsic size, leaving visible dark
+     bands between rows that don't line up with the colored side-bar
+     on the .deck-label. Explicit top/left so the JS scaling code that
+     reassigns top: 50% during corner-resize still wins cleanly. */
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
 }
