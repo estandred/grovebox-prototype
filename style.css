@@ -741,8 +741,18 @@ a { color: inherit; text-decoration: none; }
    the row distribution; align-content: center stacks the rows vertically
    in the middle. */
 .area-effects {
-  display: flex;
-  flex-wrap: wrap;
+  /* Fixed 3-column grid so the default 6 knobs sit in a 2×3 layout,
+     perfectly aligned. Extra knobs added via "+" flow into a 3rd row
+     left-to-right — odd remainders (e.g. 7 knobs) put the lone extra
+     in the bottom-left cell of the new row; the user accepts that
+     "won't be 100% aligned" behavior.
+     justify-content: center centers the whole grid horizontally in the
+     panel (we use clamp() column widths so the grid is content-sized
+     rather than spanning full width). align-content: center centers it
+     vertically against the available height. */
+  display: grid;
+  grid-template-columns: repeat(3, clamp(48px, 22%, 80px));
+  grid-auto-rows: clamp(48px, 22%, 80px);
   justify-content: center;
   align-content: center;
   gap: 8px 10px;
@@ -750,17 +760,15 @@ a { color: inherit; text-decoration: none; }
   min-height: 0;
   padding: 2px;
 }
-/* Fixed cell width so the knobs stay uniform regardless of how many are
-   shown — flex-wrap decides when to wrap based on this width. Sized so
-   6 knobs comfortably fit in one row at typical area widths; if there
-   are more, they spill onto a second row that justify-content centers. */
+/* Knob cell: grid items now drive the size so they stay uniform whether
+   the row is 1, 2, or 3 knobs across. */
 .effect-knob-cell {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
-  width: clamp(48px, 13%, 80px);
+  width: 100%;
+  height: 100%;
   aspect-ratio: 1 / 1;
 }
 /* × button in the corner of every knob cell — edit mode only. Always

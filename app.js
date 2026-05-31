@@ -742,8 +742,29 @@ function lpShutdown() {
 }
 
 function loadSongs() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; }
-  catch { return []; }
+  let songs;
+  try { songs = JSON.parse(localStorage.getItem(LS_KEY)) || []; }
+  catch { songs = []; }
+  // One-time migration: reset every song's enabledEffects to the new
+  // 6-knob default ("reverb, echo, filter, pitch, volume, distortion").
+  // Marked per-song via _effectsDefaultMigrated so subsequent loads
+  // skip the reset — the user's later add/remove choices are preserved.
+  // Knob values (song.effects) and parameter overrides (song.effectParams)
+  // are left untouched; only the visible list of knobs changes.
+  let migrated = false;
+  for (const s of songs) {
+    if (!s || s._effectsDefaultMigrated) continue;
+    s.enabledEffects = s.enabledEffects || {};
+    for (const t of TRACKS) {
+      s.enabledEffects[t.id] = [...DEFAULT_ENABLED_EFFECTS];
+    }
+    s._effectsDefaultMigrated = true;
+    migrated = true;
+  }
+  if (migrated) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(songs)); } catch {}
+  }
+  return songs;
 }
 function saveSongs(songs) {
   localStorage.setItem(LS_KEY, JSON.stringify(songs));
@@ -799,6 +820,12 @@ const TRACK_EFFECT_KEYS = [
   "filter", "compressor", "volume", "pump", "pitch",
 ];
 const VOCAL_EXTRA_EFFECTS = ["robot"];
+// Default set of effect knobs every NEW song (and every track) starts
+// with — six knobs arranged 2 rows × 3 cols in the effects panel.
+// The user can still add any other effect via the "+" button; this is
+// just the starting kit. Ordered so the grid reads left-to-right,
+// top-to-bottom.
+const DEFAULT_ENABLED_EFFECTS = ["reverb", "echo", "filter", "pitch", "volume", "distortion"];
 // Per-knob defaults. filter is bipolar (0.5 = bypass; <0.5 = LPF, >0.5 = HPF).
 // pitch is also bipolar (0.5 = no shift; <0.5 = down, >0.5 = up; ±12 semis).
 // volume's 0.5 = unity (1.0×). pump is rhythmic LFO (0 = bypass).
@@ -1023,7 +1050,10 @@ function getEnabledEffects(song, trackId) {
   if (!song.enabledEffects) song.enabledEffects = {};
   const master = trackEffectKeys(trackId);
   if (!Array.isArray(song.enabledEffects[trackId])) {
-    song.enabledEffects[trackId] = [...master];
+    // New track / fresh song → start with the curated 6-knob default
+    // (reverb, echo, filter, pitch, volume, distortion). Filter against
+    // the master list so unknown defaults are silently dropped (defensive).
+    song.enabledEffects[trackId] = DEFAULT_ENABLED_EFFECTS.filter(k => master.includes(k));
   }
   // Sanitize: drop any keys not in the master list (e.g. dropped a track-
   // specific effect from VOCAL_EXTRA_EFFECTS). De-dupe just in case.
