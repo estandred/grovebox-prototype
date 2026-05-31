@@ -973,6 +973,40 @@ function backfillParamVisibility() {
   }
   if (changed) saveGlobalPref("paramVisibility", GLOBAL_PREFS.paramVisibility);
 }
+
+// Aggressive recovery: if the user's session shows a stale visibility
+// list (likely because the previous backfill couldn't persist via a
+// dev server that was down, or this is the very first load with the
+// new schema), force the lists for known-renamed effects back to
+// "no override" so the editor shows every current param. Specifically
+// targets pump now that "intensity" was relabeled to "sharpness" and
+// the user reported the param not showing in their editor. Idempotent.
+function forceResetStaleVisibility() {
+  if (!GLOBAL_PREFS.paramVisibility) return;
+  let changed = false;
+  // For each effect whose schema we know is the source of truth, if the
+  // user's stored list is missing any current schema key, drop the
+  // list entirely (so isParamVisible returns true for everything).
+  const checkEffects = ["pump"];
+  for (const context of ["knob", "pad"]) {
+    const ctxMap = GLOBAL_PREFS.paramVisibility[context];
+    if (!ctxMap) continue;
+    for (const effect of checkEffects) {
+      const list = ctxMap[effect];
+      if (!Array.isArray(list)) continue;
+      const defs = context === "knob"
+        ? (typeof getEffectParamsDef === "function" ? getEffectParamsDef(effect) : null)
+        : (typeof getPerformPadParamsDef === "function" ? getPerformPadParamsDef(effect) : null);
+      if (!Array.isArray(defs)) continue;
+      const missing = defs.some(d => !list.includes(d.key));
+      if (missing) {
+        delete ctxMap[effect];
+        changed = true;
+      }
+    }
+  }
+  if (changed) saveGlobalPref("paramVisibility", GLOBAL_PREFS.paramVisibility);
+}
 function setParamVisible(context, effect, paramKey, visible) {
   const map = getParamVisibilityMap();
   if (!map[context][effect]) {
@@ -9798,9 +9832,23 @@ Promise.race([
   loadGlobalPrefs(),
   new Promise((resolve) => setTimeout(resolve, 250)),
 ]).then(() => {
-  // Backfill any pre-existing per-param visibility lists with newly
-  // added schema keys so params introduced after the user customized
-  // (e.g. pump.intensity → "sharpness" label) are visible by default.
-  try { backfillParamVisibility(); } catch {}
+  try {
+    backfillParamVisibility();
+    forceResetStaleVisibility();
+  } catch {}
   render();
+});
+
+// Belt-and-suspenders: if the race above won via the 250ms timeout
+// before loadGlobalPrefs actually finished, GLOBAL_PREFS was still
+// empty when the backfill ran and it had nothing to migrate. Once the
+// real prefs land we redo the migration + force-reset + rerender so
+// the now-loaded visibility lists actually get fixed.
+loadGlobalPrefs().then(() => {
+  let changed = false;
+  try { backfillParamVisibility(); changed = true; } catch {}
+  try { forceResetStaleVisibility(); changed = true; } catch {}
+  if (changed) {
+    try { if (editor) rerenderAllAreas(); } catch {}
+  }
 });
