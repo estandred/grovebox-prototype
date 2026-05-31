@@ -4631,9 +4631,13 @@ function renderPadsBody(song, track) {
     onclick: isEdit ? (e) => { e.stopPropagation(); renameBank(track, active.id); } : null,
   }, active ? active.name : "1"));
   if (isEdit) {
-    // Bank "+" used to live here. Removed per the user's request — banks
-    // can still be created elsewhere (or by editing the song JSON); this
-    // just keeps the samples-tab header clean.
+    // "+" button to add a new (empty) bank. Auto-names to the next
+    // unused number; click the name afterwards to rename.
+    headerItems.push(el("button", {
+      class: "bank-add",
+      title: "add a new bank",
+      onclick: () => addBank(track),
+    }, "+"));
     // Delete the current bank — only when there's more than one bank,
     // and only in edit mode (no accidental deletes during a take).
     if (banks.length >= 2 && active) {
