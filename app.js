@@ -6929,17 +6929,46 @@ function sizeDeckCanvas(trackId) {
   updateRowMarkers(trackId);
 }
 
-// Free mode intentionally has NO beat grid — each row's timeline is sized
-// to its own samples so a fixed beat-count grid doesn't apply. This
-// function is kept as a TEARDOWN hook so any beats element left from a
-// prior shared-mode render gets removed when we switch into free mode.
+// Free mode dynamic beat grid: when voices are playing on a row, lay out
+// a vertical grid showing every beat across the row's current audio
+// span (at the song's BPM), with bar boundaries (every BAR_BEATS) shown
+// more prominently. Removed entirely when the row is empty so an idle
+// row stays bare.
 function rebuildFreeBeats(trackId) {
   if (!editor || isTimelineShared(editor.song)) return;
   const d = editor.decks[trackId];
   if (!d || !d.canvas) return;
-  // Tear down any existing dynamic grid; don't build a new one.
+  const wrap = d.canvas.parentElement;
+  if (!wrap) return;
+
+  // Tear down any existing dynamic grid before rebuilding.
   if (d.beats && d.beats.parentElement) d.beats.parentElement.removeChild(d.beats);
   d.beats = null;
+
+  const bounds = rowAudioBounds(trackId);
+  if (!bounds) return; // no voices → no grid (the row stays bare)
+
+  const bpm = (editor.song.bpm) || DEFAULT_BPM;
+  const beatDur = 60 / bpm;
+  if (!(beatDur > 0)) return;
+  const beatCount = Math.max(1, Math.round(bounds.span / beatDur));
+  if (!Number.isFinite(beatCount)) return;
+
+  const beats = el("div", {
+    class: "deck-beats free-beats",
+    style: `grid-template-columns: repeat(${beatCount}, 1fr)`,
+  },
+    Array.from({ length: beatCount }, (_, i) => {
+      const beatNum = i + 1;
+      const isBar = beatNum % BAR_BEATS === 0;
+      return el("div", { class: "deck-beat" + (isBar ? " bar-boundary" : "") },
+        isBar ? el("span", { class: "beat-num" }, String(beatNum / BAR_BEATS)) : null
+      );
+    })
+  );
+  if (d.markers) wrap.insertBefore(beats, d.markers);
+  else wrap.appendChild(beats);
+  d.beats = beats;
 }
 
 function clearWaveform(trackId) {
