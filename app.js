@@ -6484,8 +6484,12 @@ function renderPad(song, track, idx) {
     title: titleText,
     // Only loaded pads can be dragged out as a source — empty pads have
     // nothing to move. Edit-mode-only so live performance taps don't
-    // start an accidental drag.
-    draggable: !!(pad && isEdit),
+    // start an accidental drag. NOTE: must be the LITERAL string "true"
+    // (not boolean true) — the el() helper turns a boolean true into
+    // draggable="" which the HTML spec treats as the enumerated "auto"
+    // value, and "auto" on a <button> means NOT draggable. That's why
+    // the previous build wouldn't grab.
+    draggable: (pad && isEdit) ? "true" : "false",
     ondragstart: (e) => {
       if (!pad || !isEdit) { e.preventDefault(); return; }
       try {
