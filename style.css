@@ -1265,6 +1265,13 @@ a { color: inherit; text-decoration: none; }
   border-color: var(--accent);
   background: color-mix(in oklab, var(--accent) 12%, var(--panel-2));
 }
+/* Source pad mid-drag: dim + slight scale-in so it's obvious which pad
+   is being moved. Cleared in dragend regardless of whether the drop
+   landed on a pad. */
+.pad.dragging-source {
+  opacity: 0.45;
+  transform: scale(0.96);
+}
 .pad-name,
 .pad-emoji {
   /* Initial font-size is just a seed; fitPadName() picks the largest size

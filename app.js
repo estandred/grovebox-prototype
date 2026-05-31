@@ -6482,23 +6482,56 @@ function renderPad(song, track, idx) {
       + (isMapSelected ? " midi-map-selected" : ""),
     style: `--row-color: ${track.color}`,
     title: titleText,
-    onpointerdown: (e) => {
-      if (e.button !== undefined && e.button !== 0) return;
-      // Mapping mode: tap selects this pad and waits for the next MIDI
-      // note. Tapping the already-selected pad clears the selection.
-      if (isMapping) {
-        e.preventDefault();
-        editor.midiMappingSelected = isMapSelected ? null : mapKey;
-        rerenderAllAreas();
-        return;
-      }
-      onPadActivate(track, idx);
+    // Only loaded pads can be dragged out as a source — empty pads have
+    // nothing to move. Edit-mode-only so live performance taps don't
+    // start an accidental drag.
+    draggable: !!(pad && isEdit),
+    ondragstart: (e) => {
+      if (!pad || !isEdit) { e.preventDefault(); return; }
+      try {
+        e.dataTransfer.effectAllowed = "move";
+        // Custom MIME so the receiver can distinguish a pad-to-pad
+        // drag from a file drop (which puts files on dataTransfer.files
+        // instead). Encodes source trackId + idx so the move/swap
+        // handler can look up the source pad.
+        e.dataTransfer.setData(
+          "application/x-beatstudio-pad",
+          JSON.stringify({ trackId: track.id, idx })
+        );
+        // Plaintext fallback so dragging into a non-beatstudio target
+        // doesn't silently fail with no dataTransfer payload at all.
+        e.dataTransfer.setData("text/plain", pad.name || "sample");
+        node.classList.add("dragging-source");
+      } catch {}
     },
-    ondragover: (e) => { e.preventDefault(); node.classList.add("dragover"); },
+    ondragend: () => {
+      node.classList.remove("dragging-source");
+    },
+    ondragover: (e) => {
+      e.preventDefault();
+      // Differentiate visually: pads-from-pad drags get a move cursor,
+      // file drags keep the default copy cursor.
+      try {
+        const isPadDrag = e.dataTransfer.types && Array.prototype.includes.call(e.dataTransfer.types, "application/x-beatstudio-pad");
+        e.dataTransfer.dropEffect = isPadDrag ? "move" : "copy";
+      } catch {}
+      node.classList.add("dragover");
+    },
     ondragleave: () => node.classList.remove("dragover"),
     ondrop: async (e) => {
       e.preventDefault();
       node.classList.remove("dragover");
+      // Pad-to-pad drag has priority over any accidental file payload.
+      const padPayload = e.dataTransfer.getData("application/x-beatstudio-pad");
+      if (padPayload) {
+        try {
+          const src = JSON.parse(padPayload);
+          if (src && src.trackId && Number.isInteger(src.idx)) {
+            await movePadSample(src.trackId, src.idx, track.id, idx);
+          }
+        } catch (err) { console.warn("[drag] bad pad payload", err); }
+        return;
+      }
       const file = e.dataTransfer.files?.[0];
       if (file) await assignSample(track, idx, file);
     },
@@ -8333,6 +8366,36 @@ async function assignSample(track, idx, file) {
       persist({ silent: true });
     }
   }
+}
+
+// Move (or swap) a pad's sample to another pad location. Both source
+// and target can be on any track. If the target pad already has a
+// sample, the two are swapped (no data loss); if it's empty, the
+// source becomes empty and the target inherits the source's pad
+// object verbatim (preserves name, mode, interaction, etc.).
+//
+// Called by the drag-and-drop pad handlers — file drops still flow
+// through assignSample() above.
+async function movePadSample(srcTrackId, srcIdx, dstTrackId, dstIdx) {
+  if (!editor) return;
+  if (srcTrackId === dstTrackId && srcIdx === dstIdx) return; // no-op
+  const song = editor.song;
+  if (!song.pads[srcTrackId] || !song.pads[dstTrackId]) return;
+  const srcPad = song.pads[srcTrackId][srcIdx];
+  if (!srcPad) return; // dragging an empty pad — nothing to move
+  const dstPad = song.pads[dstTrackId][dstIdx];
+  // Swap (or move into empty). null/undefined both stand for "empty".
+  song.pads[dstTrackId][dstIdx] = srcPad;
+  song.pads[srcTrackId][srcIdx] = dstPad || null;
+  markDirty();
+  schedulePersist();
+  // Find both track objects so we can refresh both areas — when the
+  // user drags across tracks the source area also needs to update
+  // (the moved pad is no longer there).
+  const srcTrack = TRACKS.find(t => t.id === srcTrackId);
+  const dstTrack = TRACKS.find(t => t.id === dstTrackId);
+  if (srcTrack) rerenderArea(srcTrack);
+  if (srcTrack !== dstTrack && dstTrack) rerenderArea(dstTrack);
 }
 
 function hasAnySample(song) {
