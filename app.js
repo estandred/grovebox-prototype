@@ -1757,6 +1757,10 @@ const PERFORM_PAD_PARAMS = {
   pump: [
     { key: "compression", label: "compression", min: 0, max: 1, default: 0.8 },
     { key: "volume",      label: "volume",      min: 0, max: 1, default: 0.8 },
+    // Key matches the knob-effect schema so applyPerformPadAudio can
+    // read the same field name. Label says "sharpness" everywhere
+    // user-facing.
+    { key: "intensity",   label: "sharpness",   type: "fader", min: 0, max: 1, default: 0.5 },
     { key: "rate", label: "rate", type: "choice", default: 1, choices: [
       { label: "1/2", value: 0.5 },
       { label: "1",   value: 1   },
@@ -6301,7 +6305,10 @@ function applyPerformPadAudio(trackId, pad) {
     return;
   }
   if (pad.effect === "pump") {
-    Audio.setPumpParams(trackId, 1, p.compression ?? 0.8, p.volume ?? 0.8, p.rate ?? 1, 0.5);
+    // Pull intensity (= "sharpness" in the UI) from the pad's stored
+    // params, falling back to 0.5 if the pad was created before this
+    // param existed in the schema.
+    Audio.setPumpParams(trackId, 1, p.compression ?? 0.8, p.volume ?? 0.8, p.rate ?? 1, p.intensity ?? 0.5);
     return;
   }
   // The "amount" param was removed app-wide because the main knob
