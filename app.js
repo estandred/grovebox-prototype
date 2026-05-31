@@ -8372,11 +8372,11 @@ async function assignSample(track, idx, file) {
   }
 }
 
-// Move (or swap) a pad's sample to another pad location. Both source
-// and target can be on any track. If the target pad already has a
-// sample, the two are swapped (no data loss); if it's empty, the
-// source becomes empty and the target inherits the source's pad
-// object verbatim (preserves name, mode, interaction, etc.).
+// Move a pad's sample to another pad location, REPLACING whatever was
+// at the target. The source pad always becomes empty; the target
+// always inherits the source's full pad object (sampleId, name, mode,
+// interaction, …). If the target had a sample, that sample's blob is
+// freed from IndexedDB + the audio cache so it doesn't leak storage.
 //
 // Called by the drag-and-drop pad handlers — file drops still flow
 // through assignSample() above.
@@ -8388,9 +8388,15 @@ async function movePadSample(srcTrackId, srcIdx, dstTrackId, dstIdx) {
   const srcPad = song.pads[srcTrackId][srcIdx];
   if (!srcPad) return; // dragging an empty pad — nothing to move
   const dstPad = song.pads[dstTrackId][dstIdx];
-  // Swap (or move into empty). null/undefined both stand for "empty".
+  // Free the replaced sample's storage. Fire-and-forget — failure here
+  // just leaves a stale IDB row, never breaks the move.
+  if (dstPad && dstPad.sampleId && dstPad.sampleId !== srcPad.sampleId) {
+    try { deleteSample(dstPad.sampleId).catch(() => {}); } catch {}
+    try { Audio.evict(dstPad.sampleId); } catch {}
+  }
+  // Replace: source goes empty, target takes the source's pad verbatim.
   song.pads[dstTrackId][dstIdx] = srcPad;
-  song.pads[srcTrackId][srcIdx] = dstPad || null;
+  song.pads[srcTrackId][srcIdx] = null;
   markDirty();
   schedulePersist();
   // Find both track objects so we can refresh both areas — when the
