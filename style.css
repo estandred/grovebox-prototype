@@ -741,32 +741,31 @@ a { color: inherit; text-decoration: none; }
    the row distribution; align-content: center stacks the rows vertically
    in the middle. */
 .area-effects {
-  /* Fixed 3-column grid so the default 6 knobs sit in a 2×3 layout,
-     perfectly aligned. Extra knobs added via "+" flow into a 3rd row;
-     odd remainders sit in the bottom-left ("won't be 100% aligned"
-     per the user).
-     Rows use minmax(0, 1fr) so they SHARE the available panel height
-     instead of each row trying to be a fixed size — that fixed sizing
-     was making the grid taller than the panel, spilling knobs on top
-     of the area header and labels off the bottom border. Now every
-     row gets an equal slice of whatever height the panel has, and
-     overflow: hidden guarantees nothing escapes the panel even on
-     the tightest layouts. The knob component shrinks gracefully via
-     its clamp()-sized dial. */
+  /* Fixed 3-column grid with fixed-height rows. Default 6 knobs sit
+     in a 2×3; adding a 7th creates a third row, etc. Centered both
+     axes inside the panel.
+     Why FIXED row height instead of fractional: previous attempts to
+     let rows divide the panel's available height ("share" model) made
+     cells too tall AND too short depending on knob count. Tall cells
+     pushed labels out the bottom on overflow; short cells crushed the
+     dial and clipped labels via overflow:hidden. A fixed cell size
+     keeps every knob looking identical regardless of how many knobs
+     are present.
+     If enough knobs are added to overflow the panel, overflow: hidden
+     clips the bottom rows. That's the trade we accept until a scroll
+     UI is added — visually consistent knobs > visually accessible
+     overflow. */
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: minmax(0, 1fr);
-  justify-items: center;
-  align-items: center;
-  gap: 6px 8px;
+  grid-template-columns: repeat(3, minmax(0, 80px));
+  grid-auto-rows: 68px;
+  justify-content: center;
+  align-content: center;
+  gap: 4px 6px;
   flex: 1;
   min-height: 0;
   padding: 4px;
   overflow: hidden;
 }
-/* Knob cell: fills its grid track completely (the grid distributes
-   space; the cell just claims it). Vertically stacked content — dial
-   above, label below — centered both axes inside the cell. */
 .effect-knob-cell {
   position: relative;
   display: flex;
@@ -777,7 +776,6 @@ a { color: inherit; text-decoration: none; }
   height: 100%;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
 }
 /* × button in the corner of every knob cell — edit mode only. Always
    visible (no hover requirement) since the tablet has no hover state. */
@@ -910,17 +908,15 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.04em;
   text-transform: lowercase;
   text-align: center;
-  /* Keep long names (e.g. "pitch-shift -tonejs") inside the cell —
-     wrap onto two lines, then ellipsis. Without this, a wide label
-     would push past the cell border on narrower panels and overlap
-     the neighbor cell's label. */
+  /* Single-line truncation with ellipsis. The line-clamp/-webkit-box
+     approach used previously was rendering as height 0 inside flex
+     children in some browser builds — labels just disappeared. This
+     is plain, reliable, and predictable. */
   max-width: 100%;
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  line-height: 1.15;
-  word-break: break-word;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.2;
 }
 .knob-value { display: none; }
 
