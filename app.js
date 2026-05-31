@@ -1841,10 +1841,20 @@ function ensureSongBanks(song) {
     }
     // Normalize each bank's shape. An explicit empty string for `name` is
     // allowed (means "no visible label"); only missing names get a default.
+    // IMPORTANT: only rebuild b.pads when it's missing or the wrong shape.
+    // Replacing it unconditionally with a new slice broke the shared
+    // reference between b.pads and song.pads[trackId] — the init loop
+    // calls ensureSongBanks once per track, so the earlier tracks' link
+    // would dangle (song.pads pointed at the previous, now-orphan slice).
+    // That dangling reference made uploaded samples land in song.pads
+    // only, never reach the active bank, and silently vanish on the next
+    // reload (which reads from banks).
     for (const b of banks) {
       if (!b.id) b.id = uid();
       if (b.name == null) b.name = "1";
-      b.pads = padArrTo(b.pads);
+      if (!Array.isArray(b.pads) || b.pads.length !== PADS_PER_TRACK) {
+        b.pads = padArrTo(b.pads);
+      }
     }
   }
 }
@@ -8629,8 +8639,35 @@ function markDirty() {
   schedulePersist();
 }
 
+// Force song.banks[trackId][activeBank].pads = song.pads[trackId] so the
+// "active bank" mirrors the current pads exactly. song.pads is the
+// source of truth for every read/write path in the editor; banks is
+// only consulted on reload (via ensureTrackBankLink). If a stale
+// reference ever lets the two diverge, this sync guarantees the SAVED
+// JSON is consistent — so the next reload reads back the same pads
+// the user just saw.
+function syncActiveBankPadsFromSong(song) {
+  if (!song || !song.pads || !song.banks || !editor) return;
+  for (const t of TRACKS) {
+    const trackPads = song.pads[t.id];
+    if (!Array.isArray(trackPads)) continue;
+    const banks = song.banks[t.id];
+    if (!Array.isArray(banks) || banks.length === 0) continue;
+    const activeBankId = editor.activeBank?.[t.id];
+    const bank = banks.find(b => b.id === activeBankId) || banks[0];
+    if (!bank) continue;
+    bank.pads = trackPads;
+  }
+}
+
 function persist(opts = {}) {
   if (!editor) return;
+  // Reconcile the active bank's pads with song.pads before saving. Defends
+  // against any historical or future code path that lets the live
+  // reference drift — without this, a divergence in memory becomes a
+  // divergence in localStorage, and the next reload silently loses the
+  // newer side.
+  syncActiveBankPadsFromSong(editor.song);
   const songs = loadSongs();
   const i = songs.findIndex(s => s.id === editor.song.id);
   if (i === -1) return;
