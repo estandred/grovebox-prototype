@@ -749,27 +749,32 @@ a { color: inherit; text-decoration: none; }
      justify-content: center centers the whole grid horizontally in the
      panel (we use clamp() column widths so the grid is content-sized
      rather than spanning full width). align-content: center centers it
-     vertically against the available height. */
+     vertically against the available height.
+     grid-auto-rows: auto — rows size to fit the knob (dial + gap + label)
+     instead of a percentage of grid height, which used to come out
+     shorter than the column width on wide-but-short panels and clipped
+     the label of every row except the last. */
   display: grid;
-  grid-template-columns: repeat(3, clamp(48px, 22%, 80px));
-  grid-auto-rows: clamp(48px, 22%, 80px);
+  grid-template-columns: repeat(3, clamp(56px, 22%, 80px));
+  grid-auto-rows: auto;
+  justify-items: center;
   justify-content: center;
   align-content: center;
-  gap: 8px 10px;
+  gap: 10px 10px;
   flex: 1;
   min-height: 0;
   padding: 2px;
 }
-/* Knob cell: grid items now drive the size so they stay uniform whether
-   the row is 1, 2, or 3 knobs across. */
+/* Knob cell: width comes from the grid column; height is auto so the
+   label below the dial is always visible. No aspect-ratio constraint —
+   it conflicted with grid sizing and made cells rectangular. */
 .effect-knob-cell {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   width: 100%;
-  height: 100%;
-  aspect-ratio: 1 / 1;
 }
 /* × button in the corner of every knob cell — edit mode only. Always
    visible (no hover requirement) since the tablet has no hover state. */
@@ -858,7 +863,9 @@ a { color: inherit; text-decoration: none; }
   justify-content: center;
   gap: 4px;
   width: 100%;
-  height: 100%;
+  /* height auto by default — the parent cell sizes to fit dial + label.
+     When a parent explicitly sets a height (e.g. fixed-size editors,
+     defaults modal) the natural dial sizing still works. */
   min-height: 0;
 }
 .knob-dial {
