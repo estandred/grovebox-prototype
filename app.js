@@ -245,6 +245,14 @@ function onMidiMessage(e) {
       pushMidiMonitorEvent({ type: "cc", note: data1, vel: data2, time: Date.now(), deviceName: e.target?.name });
     }
   }
+  // Opportunistic re-assert: ANY input event from the Launchpad is a
+  // chance to send the Programmer-mode SysEx, in case the device drifted
+  // back to Live mode between heartbeats. Cheap, idempotent on the
+  // device, and debounced inside lpReassertProgrammerMode to ≤4/sec so
+  // a rapid pad roll doesn't flood the MIDI bus.
+  if (_launchpadOutput && LP_NAME_RE.test(e.target?.name || "")) {
+    lpReassertProgrammerMode();
+  }
   if (cmd === 9 && vel > 0) {
     handleMidiNoteOn(note);
     // Launchpad LED feedback: flash the pressed pad bright, then fade
@@ -637,6 +645,23 @@ function lpRecoverProgrammerMode() {
     lpEnterProgrammerMode(); // one more, for stubborn firmware
     lpRefreshLights();
   }, 120);
+}
+
+// LIGHT version of the above: only re-sends the Programmer-mode SysEx
+// (no light repaint, no double-send). Fired on every Launchpad pad
+// press to keep the device sticky in Programmer mode — sending SysEx
+// while already in Programmer mode is a no-op on the device side, so
+// there's no visible flicker even if the user is hammering pads. A
+// short debounce keeps the bus traffic modest. Drift cases that need
+// a light repaint still flow through lpRecoverProgrammerMode (right-
+// column CC handler) or the 4-second heartbeat.
+let _lpLastReassertAt = 0;
+function lpReassertProgrammerMode() {
+  if (!_launchpadOutput) return;
+  const now = Date.now();
+  if (now - _lpLastReassertAt < 250) return; // ~4 pings/sec max
+  _lpLastReassertAt = now;
+  try { lpEnterProgrammerMode(); } catch {}
 }
 
 // Bring the Launchpad online: pick the port, enter Programmer mode,
