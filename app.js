@@ -945,6 +945,34 @@ function isParamVisible(context, effect, paramKey) {
   if (!Array.isArray(list)) return true; // no override → all visible
   return list.includes(paramKey);
 }
+
+// One-time migration: backfill any custom visibility list with EVERY
+// current schema key, so params added after the list was last touched
+// (e.g. pump's intensity/sharpness on songs that have a visibility
+// override from an older app version) become visible by default.
+// Idempotent — only writes if it actually added something.
+function backfillParamVisibility() {
+  if (!GLOBAL_PREFS.paramVisibility) return;
+  let changed = false;
+  for (const context of ["knob", "pad"]) {
+    const ctxMap = GLOBAL_PREFS.paramVisibility[context];
+    if (!ctxMap || typeof ctxMap !== "object") continue;
+    for (const [effect, list] of Object.entries(ctxMap)) {
+      if (!Array.isArray(list)) continue;
+      const defs = context === "knob"
+        ? (typeof getEffectParamsDef === "function" ? getEffectParamsDef(effect) : null)
+        : (typeof getPerformPadParamsDef === "function" ? getPerformPadParamsDef(effect) : null);
+      if (!Array.isArray(defs)) continue;
+      for (const d of defs) {
+        if (!list.includes(d.key)) {
+          list.push(d.key);
+          changed = true;
+        }
+      }
+    }
+  }
+  if (changed) saveGlobalPref("paramVisibility", GLOBAL_PREFS.paramVisibility);
+}
 function setParamVisible(context, effect, paramKey, visible) {
   const map = getParamVisibilityMap();
   if (!map[context][effect]) {
@@ -9769,4 +9797,10 @@ window.testAudio = function () {
 Promise.race([
   loadGlobalPrefs(),
   new Promise((resolve) => setTimeout(resolve, 250)),
-]).then(() => { render(); });
+]).then(() => {
+  // Backfill any pre-existing per-param visibility lists with newly
+  // added schema keys so params introduced after the user customized
+  // (e.g. pump.intensity → "sharpness" label) are visible by default.
+  try { backfillParamVisibility(); } catch {}
+  render();
+});
