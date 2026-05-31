@@ -3431,6 +3431,22 @@ function route() {
   return { name: "home" };
 }
 window.addEventListener("hashchange", () => {
+  // Flush any pending debounced save BEFORE we tear down the editor and
+  // re-load the song from localStorage. Without this, uploading samples
+  // and immediately clicking "perform" loses the samples — the 400ms
+  // debounce hasn't fired yet, so localStorage still has the empty
+  // version, and the next route reload reads that stale copy. Calling
+  // persist() synchronously here guarantees the in-memory editor.song
+  // is what the next render reads back.
+  if (editor && editor.dirty) {
+    try {
+      clearTimeout(_schedulePersistTimer);
+      _schedulePersistTimer = null;
+      persist({ silent: true });
+    } catch (err) {
+      console.warn("[route] flush persist failed", err);
+    }
+  }
   // If we're switching between perform <-> edit on the SAME song, keep
   // the audio + transport alive across the transition (no stop on mode
   // switch). Stash the playing-voice metadata so the new editor instance
