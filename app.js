@@ -592,10 +592,30 @@ function lpHeartbeat() {
       _launchpadOutput = null;
     }
   }
-  // No output → attempt to find one. This also re-enters Programmer
-  // mode + repaints lights via lpInit.
+  // No output → attempt to find one. lpInit also enters Programmer mode
+  // + repaints lights.
   if (!_launchpadOutput) {
     lpInit();
+    return;
+  }
+  // Device IS still connected — but on the Mini MK3 the device can drift
+  // back to its default Live mode for no obvious reason (user lifted the
+  // controller, a stray idle reset inside its firmware, USB power blip).
+  // We can't passively detect that (Live + Programmer modes are silent
+  // until a button is pressed), so just re-issue the Programmer-mode
+  // SysEx every heartbeat. It's a ~10-byte message and idempotent — if
+  // the device is already in Programmer mode the device firmware
+  // treats it as a no-op. Then repaint the lights so a drift that
+  // wiped the LEDs gets restored in ≤4 seconds without a page reload.
+  try {
+    lpEnterProgrammerMode();
+    // Brief delay so the device commits the layout change before we
+    // paint colors against it.
+    setTimeout(() => {
+      try { lpRefreshLights(); } catch {}
+    }, 60);
+  } catch (err) {
+    console.warn("[launchpad] heartbeat re-affirm failed", err);
   }
 }
 
