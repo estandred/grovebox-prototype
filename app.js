@@ -2702,12 +2702,20 @@ const Audio = (() => {
 
     const input  = c.createGain();
     const output = c.createGain();
-    // No dry/wet bypass. The wet (pitch-shifted) path is the ONLY path,
-    // so the chain's latency is constant whether the user dials pitch
-    // up, down, or to zero. Switching between dry (zero-latency) and
-    // wet (40ms-latency) at runtime causes an audible "rewind" of the
-    // last ~40ms played back at the new pitch — that's the glide/speed
-    // change the user was hearing. Constant latency eliminates it.
+    // Dry / wet bypass. The granular (wet) path crossfades two windowed
+    // grains — even at 0 cents that crossfade leaves a constant ~50Hz
+    // amplitude ripple / comb-filter artifact on the signal, which
+    // colors ALL audio (it sounds like a low-bitrate / phasey effect).
+    // So at 0 cents we route the pure DRY signal (no latency, no
+    // artifact); we only cross into the wet granular path when the user
+    // actually shifts pitch. The tradeoff — a small one-time "rewind"
+    // glitch at the instant pitch engages/disengages, caused by the
+    // 40ms latency difference between the paths — is far preferable to
+    // permanent artifacts on every sample. Default is dry.
+    const dryGain = c.createGain(); dryGain.gain.value = 1;
+    const wetGain = c.createGain(); wetGain.gain.value = 0;
+    input.connect(dryGain);
+    dryGain.connect(output);
 
     // Window envelope buffer: smooth rise → hold → fall. Looped at the
     // crossfade rate so the two channels alternate seamlessly.
@@ -2752,7 +2760,7 @@ const Audio = (() => {
 
       input.connect(delay);
       delay.connect(fadeGain);
-      fadeGain.connect(output);
+      fadeGain.connect(wetGain);
 
       try { mod.start(startAt); } catch {}
       try { winSrc.start(startAt); } catch {}
@@ -2773,6 +2781,21 @@ const Audio = (() => {
       ch1.modGain.gain.setValueAtTime(shift * delayTime, t);
       ch2.modGain.gain.cancelScheduledValues(t);
       ch2.modGain.gain.setValueAtTime(shift * delayTime, t);
+      // Cross into the wet granular path only when actually shifting.
+      // At (near) 0 cents route the clean dry signal so no grain
+      // artifact colors the audio. A tiny 8ms crossfade avoids a click
+      // on the transition. |cents| < 1 counts as "no shift" — well
+      // below audible and covers float noise around the 0.5 knob.
+      const wantWet = Math.abs(cents) >= 1;
+      const RAMP = 0.008;
+      const setGain = (g, v) => {
+        try { g.cancelScheduledValues(t); } catch {}
+        try { g.setValueAtTime(g.value, t); } catch {}
+        try { g.linearRampToValueAtTime(v, t + RAMP); }
+        catch { try { g.setValueAtTime(v, t); } catch {} }
+      };
+      setGain(dryGain.gain, wantWet ? 0 : 1);
+      setGain(wetGain.gain, wantWet ? 1 : 0);
     }
     setCents(0);
 
