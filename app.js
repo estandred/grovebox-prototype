@@ -2977,14 +2977,12 @@ const Audio = (() => {
     chain.pumpLFO = src;
   }
 
-  // Public: rebuild every track's pump LFO. Called from Transport.start
-  // so the LFO immediately phase-locks to the new beat grid the moment
-  // the song begins playing.
-  function realignAllPumpLFOs() {
-    for (const chain of trackChains.values()) {
-      if (chain && chain.pumpShape) rebuildPumpLFO(chain);
-    }
-  }
+  // Public: no-op now that the pump LFO is back on OscillatorNode (which
+  // is free-running and has no phase-lock hook). Left as a stub so
+  // Transport.start's Audio.realignAllPumpLFOs?.() call doesn't
+  // ReferenceError. Re-implement once a phase-lock strategy is designed
+  // that doesn't break basic audio.
+  function realignAllPumpLFOs() { /* no-op */ }
 
   function ensureTrackChain(trackId) {
     if (trackChains.has(trackId)) return trackChains.get(trackId);
@@ -3134,23 +3132,18 @@ const Audio = (() => {
     const pumpVol = c.createGain();
     pumpVol.gain.value = 1.0;
 
-    // Pump LFO is now an AudioBufferSourceNode whose buffer holds one
-    // pre-shaped cycle (peak at sample 0, trough at half). Looped at
-    // 1-cycle-per-beat (playbackRate = bpm/60), it can be started at
-    // any audio time we choose — so we start it at the NEXT beat
-    // boundary the transport defines, and from then on the buffer's
-    // peak lands exactly on every beat. pumpShape is kept (now as a
-    // passthrough Gain) so downstream wiring + the chain's outward
-    // shape don't change.
-    const pumpShape = c.createGain();
-    pumpShape.gain.value = 1;
-    const pumpLFOBuffer = makePumpLFOBuffer(c, 0.5);
-    let pumpLFO = c.createBufferSource();
-    pumpLFO.buffer = pumpLFOBuffer;
-    pumpLFO.loop = true;
-    pumpLFO.loopStart = 0;
-    pumpLFO.loopEnd = 1;
-    pumpLFO.playbackRate.value = lastBpm / 60; // 1 cycle per beat
+    // Pump LFO: reverted to the pre-phase-lock OscillatorNode + WaveShaper
+    // approach because the buffer-source implementation appears to be
+    // breaking sample audio playback entirely on some browsers (issue
+    // report: "sample pads don't play anything"). Restoring the known-
+    // working free-running oscillator; phase-lock to the beat will be
+    // re-attempted with a safer strategy once we've confirmed audio is
+    // healthy again.
+    const pumpLFO = c.createOscillator();
+    pumpLFO.type = "sine";
+    pumpLFO.frequency.value = lastBpm / 60;
+    const pumpShape = c.createWaveShaper();
+    pumpShape.curve = makeLFOShapeCurve(0.5);
     pumpLFO.connect(pumpShape);
     const pumpCompDepth = c.createGain();
     pumpCompDepth.gain.value = 0;
@@ -3160,8 +3153,10 @@ const Audio = (() => {
     pumpVolDepth.gain.value = 0;
     pumpShape.connect(pumpVolDepth);
     pumpVolDepth.connect(pumpVol.gain);
-    try { pumpLFO.start(nextBeatTime()); }
-    catch { try { pumpLFO.start(); } catch {} }
+    try { pumpLFO.start(); } catch {}
+    // Legacy fields kept so any lingering references (rebuildPumpLFO,
+    // Transport.start hook) no-op cleanly without ReferenceErrors.
+    const pumpLFOBuffer = null;
 
     // Pump dry/wet mix gains. dry = 1 by default (audio passes untouched);
     // wet = 0 (compressor branch is muted). setPumpParams crossfades these
@@ -3513,14 +3508,11 @@ const Audio = (() => {
     for (const chain of trackChains.values()) {
       chain.delayNode.delayTime.setTargetAtTime(60 / bpm, t, tc);
       chain.vibratoLFO.frequency.setTargetAtTime(bpm / 60, t, tc);
-      // Pump LFO is also beat-synced. The new buffer-based LFO can only
-      // re-phase by being rebuilt (its playbackRate isn't smoothly
-      // ramp-able without breaking the beat alignment), so on every BPM
-      // change we kick off a rebuild with the new playbackRate. The
-      // rebuild starts at the next beat boundary of the NEW grid, so
-      // the LFO stays locked.
-      if (chain.pumpShape && chain._pumpRateBeats != null) {
-        rebuildPumpLFO(chain, { playbackRate: (bpm / 60) * chain._pumpRateBeats });
+      // Pump LFO — reverted to OscillatorNode-based. Beat-synced via a
+      // smooth frequency ramp: rate is stored in beats-per-cycle so the
+      // actual Hz has to be recomputed whenever BPM changes.
+      if (chain.pumpLFO && chain.pumpLFO.frequency && chain._pumpRateBeats != null) {
+        chain.pumpLFO.frequency.setTargetAtTime((bpm / 60) * chain._pumpRateBeats, t, tc);
       }
     }
   }
@@ -3556,18 +3548,13 @@ const Audio = (() => {
     snap(chain.pumpCompDepth.gain, -compAmount * 35);
     snap(chain.pumpVolDepth.gain, volAmount * 0.5);
     chain._pumpRateBeats = rate;
-    // Phase-locked LFO: rebuild the buffer source whenever sharpness or
-    // playback rate change so the new cycle starts in-phase at the next
-    // beat boundary. The buffer holds the shape (no WaveShaper), so
-    // sharpness changes regenerate it. Rate changes just rebuild the
-    // source with the new playbackRate.
-    const newSharpness = Math.max(0, Math.min(1, intensity));
-    const newPR = (lastBpm / 60) * rate;
-    const curPR = chain.pumpLFO ? chain.pumpLFO.playbackRate.value : null;
-    const rateChanged = curPR == null || Math.abs(curPR - newPR) > 1e-4;
-    const sharpnessChanged = chain._pumpSharpness !== newSharpness;
-    if (rateChanged || sharpnessChanged) {
-      rebuildPumpLFO(chain, { sharpness: newSharpness, playbackRate: newPR });
+    // Rate ramp on the OscillatorNode frequency + shape rewrite on the
+    // WaveShaper curve. Both are smoothly ramped so audio doesn't click.
+    if (chain.pumpLFO && chain.pumpLFO.frequency) {
+      snap(chain.pumpLFO.frequency, (lastBpm / 60) * rate);
+    }
+    if (chain.pumpShape && chain.pumpShape.curve !== undefined) {
+      try { chain.pumpShape.curve = makeLFOShapeCurve(Math.max(0, Math.min(1, intensity))); } catch {}
     }
   }
 
