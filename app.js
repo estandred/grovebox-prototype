@@ -2603,11 +2603,6 @@ const Audio = (() => {
     // createPitchShifter. The source itself runs at its natural rate so
     // sample length/tempo aren't affected by pitch changes.)
     const when = __startWhen;
-    console.log("[Audio.playSync] src.start", {
-      padKey, sampleId, when, ctxTime: c.currentTime, ctxState: c.state,
-      loopEnd, shouldLoop, gainValue: gain.gain.value,
-      bufDuration: playBuf?.duration,
-    });
     // opts.offset (in seconds) skips into the sample. Used by the
     // "catch" quantize mode so a late tap starts mid-sample to stay
     // on the beat grid instead of waiting for the next boundary.
@@ -6469,6 +6464,21 @@ function renderPad(song, track, idx) {
       + (isMapSelected ? " midi-map-selected" : ""),
     style: `--row-color: ${track.color}`,
     title: titleText,
+    // Tap-to-play / tap-to-load. This handler was accidentally dropped
+    // during the drag-and-drop rework, which killed ALL pad interaction
+    // (no sound, no animation, no file picker) — restored.
+    onpointerdown: (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      // Mapping mode: tap selects this pad and waits for the next MIDI
+      // note. Tapping the already-selected pad clears the selection.
+      if (isMapping) {
+        e.preventDefault();
+        editor.midiMappingSelected = isMapSelected ? null : mapKey;
+        rerenderAllAreas();
+        return;
+      }
+      onPadActivate(track, idx);
+    },
     // Only loaded pads can be dragged out as a source — empty pads have
     // nothing to move. Edit-mode-only so live performance taps don't
     // start an accidental drag. NOTE: must be the LITERAL string "true"
