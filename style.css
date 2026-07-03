@@ -1558,8 +1558,18 @@ a { color: inherit; text-decoration: none; }
 }
 .deck-row > .deck-label {
   /* 56px fixed left column — keeps the existing column width without
-     needing grid-template-columns. */
+     needing grid-template-columns. min-width: 0 is CRITICAL: flexbox's
+     default min-width: auto refuses to shrink an item below its text
+     width, so longer track names ("chords", "vocals") were silently
+     widening their label to ~62px while short names stayed at 56px.
+     That pushed those rows' timelines 6px right and made them 6px
+     narrower — playheads and waveforms visibly out of column with the
+     other rows. Hard-capping width restores one shared start line for
+     every timeline. */
   flex: 0 0 56px;
+  min-width: 0;
+  max-width: 56px;
+  overflow: hidden;
 }
 .deck-row > .deck-canvas-wrap {
   /* Right column fills the remaining width. flex-basis: 0 forces it to
