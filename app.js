@@ -3774,6 +3774,24 @@ window.addEventListener("hashchange", () => {
   render();
 });
 
+// Flush any pending debounced save when the tab is closed / backgrounded.
+// The knob-drag save runs on a 400ms debounce; closing the tab (or the
+// tablet switching apps) inside that window would silently drop the last
+// change. pagehide fires reliably on close/navigate-away on both desktop
+// and iOS; visibilitychange(hidden) covers app-switches on tablets.
+function flushPersistNow() {
+  if (!editor || !editor.dirty) return;
+  try {
+    clearTimeout(_schedulePersistTimer);
+    _schedulePersistTimer = null;
+    persist({ silent: true });
+  } catch {}
+}
+window.addEventListener("pagehide", flushPersistNow);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushPersistNow();
+});
+
 // Suppress the native context menu (right-click on desktop, long-press
 // on tablet) everywhere in the app. Every interaction here is driven by
 // pointer events — the native menu is never useful, just gets in the
