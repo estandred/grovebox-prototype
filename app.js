@@ -2716,6 +2716,10 @@ const Audio = (() => {
     const wetGain = c.createGain(); wetGain.gain.value = 0;
     input.connect(dryGain);
     dryGain.connect(output);
+    // Wet summing into the output — this edge was MISSING in the first
+    // version of the bypass, which silenced every track whose pitch was
+    // dialed off-center (dry muted, wet path dangling unconnected).
+    wetGain.connect(output);
 
     // Window envelope buffer: smooth rise → hold → fall. Looped at the
     // crossfade rate so the two channels alternate seamlessly.
